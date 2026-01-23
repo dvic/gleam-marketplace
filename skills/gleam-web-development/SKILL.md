@@ -435,7 +435,7 @@ See: [Wisp Testing](https://hexdocs.pm/wisp/)
 
 Consult testing documentation:
 - [Gleeunit](https://hexdocs.pm/gleeunit/)
-- [Testing Practices](../rules/testing-practices.md)
+- [Testing Practices](../../rules/testing-practices.md)
 
 ## Common Patterns
 

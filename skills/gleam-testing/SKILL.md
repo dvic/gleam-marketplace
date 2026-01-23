@@ -42,7 +42,7 @@ project/
 
 The `gleeunit/should` module is **deprecated**.
 
-See examples: [Testing Practices](../rules/testing-practices.md)
+See examples: [Testing Practices](../../rules/testing-practices.md)
 
 ### Test Function Naming (MANDATORY)
 
@@ -233,7 +233,7 @@ Tests run on both Erlang and JavaScript targets by default. Be aware of platform
 - Some external functions behave differently
 - Platform-specific tests can use `@target` attribute
 
-See: [External Functions](../rules/external-functions.md)
+See: [External Functions](../../rules/external-functions.md)
 
 ## CI/CD Integration
 

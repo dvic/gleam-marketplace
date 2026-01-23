@@ -7,13 +7,14 @@ description: Guides Claude through integrating Gleam with JavaScript code using 
 
 This skill guides Claude Code through integrating Gleam with JavaScript code.
 
+**IMPORTANT**: Always prefer pure Gleam solutions. Use externals only when there is no suitable alternative.
+
 ## Primary Sources
 
-1. **[Gleam Externals - JavaScript](https://gleam.run/documentation/externals/)** - Official FFI guide
+1. **[Gleam Externals Documentation](https://gleam.run/documentation/externals/)** - Official FFI guide
 2. **[Gleam JavaScript Package](https://hexdocs.pm/gleam_javascript/)** - JavaScript integration utilities
 3. **[Gleam Fetch](https://hexdocs.pm/gleam_fetch/)** - Fetch API bindings
-4. **[Conversation](https://hexdocs.pm/conversation/)** - Request/Response API bindings
-5. **[ESGleam](https://hexdocs.pm/esgleam/)** - esbuild integration
+4. **[ESGleam](https://hexdocs.pm/esgleam/)** - esbuild integration
 
 ## JavaScript Target
 
@@ -31,74 +32,131 @@ Output in `build/dev/javascript/`.
 node build/dev/javascript/my_project/my_module.mjs
 ```
 
-## External Functions
+## @external Attribute Syntax
+
+**Syntax**: `@external(javascript, module_path, function_name)`
+
+- **module_path**: Relative path to `.mjs` file or npm package name
+- **function_name**: JavaScript function to call
+- **Type annotations are MANDATORY**
 
 ### Basic JavaScript External
 
 ```gleam
-@external(javascript, "./my_module.mjs", "myFunction")
+@external(javascript, "./my_ffi.mjs", "myFunction")
 pub fn my_function(arg: String) -> Int
 ```
 
-**Important**: Module paths are relative. Function names match JavaScript exports.
-
-See: [External Functions - JavaScript](https://gleam.run/documentation/externals/)
-
 ### Creating FFI Files
 
-Create `my_module.mjs` in your project:
+Create `my_ffi.mjs` (must use `.mjs` extension):
 
 ```javascript
-// src/my_module.mjs or priv/my_module.mjs
+// src/my_ffi.mjs
 
 export function myFunction(arg) {
   return arg.length;
 }
 ```
 
-## Data Type Mapping
+**Important**: Paths are relative to the Gleam source file.
 
-### Gleam to JavaScript
+## Type Safety and Testing (CRITICAL)
 
-| Gleam Type | JavaScript Type |
-|------------|----------------|
-| `Int` | `number` |
-| `Float` | `number` |
-| `String` | `string` |
-| `Bool` | `boolean` |
-| `List(a)` | Custom List object |
-| `#(a, b)` | Array `[a, b]` |
-| `Result(a, e)` | Custom Result object |
-| Custom types | Custom objects |
+### The Compiler Cannot Verify External Types
 
-### Constructing Gleam Types in JavaScript
+From official documentation:
 
-Import constructors from generated Gleam code:
+> The Gleam compiler will ensure that all uses of the function will be correct for the annotated types, but **it cannot verify that the function implemented in the other language returns the specified types**.
 
-```javascript
-// Importing from generated Gleam modules
-import { Ok, Error } from "../gleam.mjs";
-import { Some, None } from "../gleam_stdlib/gleam/option.mjs";
+**You are responsible for ensuring the external function matches the types you declare.**
 
-export function parseNumber(input) {
-  const num = parseInt(input);
-  if (isNaN(num)) {
-    return new Error("Not a number");
-  }
-  return new Ok(num);
-}
+### Write More Tests (MANDATORY)
 
-export function findFirst(arr) {
-  if (arr.length === 0) {
-    return new None();
-  }
-  return new Some(arr[0]);
+Because externals bypass compiler analysis:
+
+- **Write more unit tests than usual** when using external functions
+- Test all edge cases thoroughly
+- Verify type conversions are correct
+- Test error handling paths
+
+```gleam
+pub fn external_function_test() {
+  let result = my_external_function("test")
+  let assert Ok(value) = result
+  assert value == expected
 }
 ```
 
-### Custom Type Constructors
+## JavaScript API for Gleam Data (v1.13+)
 
-Format: `TypeName$Variant`
+Gleam v1.13+ provides construction functions for data types.
+
+### Lists
+
+```javascript
+import { List$Empty, List$NonEmpty } from "./gleam.mjs";
+
+// Empty list
+const empty = List$Empty();
+
+// List [1, 2, 3]
+const list = List$NonEmpty(1, List$NonEmpty(2, List$NonEmpty(3, List$Empty())));
+
+// Helper: Convert array to Gleam List
+function arrayToList(arr) {
+  let list = List$Empty();
+  for (let i = arr.length - 1; i >= 0; i--) {
+    list = List$NonEmpty(arr[i], list);
+  }
+  return list;
+}
+```
+
+### Results
+
+```javascript
+import { Result$Ok, Result$Error } from "./gleam.mjs";
+
+// Success
+const success = Result$Ok(42);
+
+// Error
+const failure = Result$Error("not found");
+
+// Example: Parse number
+export function parseNumber(input) {
+  const num = parseInt(input);
+  if (isNaN(num)) {
+    return Result$Error("Not a number");
+  }
+  return Result$Ok(num);
+}
+```
+
+### Options
+
+```javascript
+import { Some, None } from "./gleam.mjs";
+
+// Some value
+const some = Some(42);
+
+// None
+const none = None();
+
+// Example: Find first
+export function findFirst(arr) {
+  if (arr.length === 0) {
+    return None();
+  }
+  return Some(arr[0]);
+}
+```
+
+### Custom Types
+
+Pattern: `TypeName$VariantName(fields...)`
 
 ```gleam
 // In Gleam
@@ -106,127 +164,70 @@ pub type User {
   Guest
   LoggedIn(id: Int, name: String)
 }
-
-@external(javascript, "./user_ffi.mjs", "createGuest")
-pub fn create_guest() -> User
-
-@external(javascript, "./user_ffi.mjs", "createLoggedIn")
-pub fn create_logged_in(id: Int, name: String) -> User
 ```
 
 ```javascript
-// In user_ffi.mjs
+// In JavaScript FFI
 import { User$Guest, User$LoggedIn } from "./user.mjs";
 
 export function createGuest() {
-  return new User$Guest();
+  return User$Guest();  // No arguments
 }
 
 export function createLoggedIn(id, name) {
-  return new User$LoggedIn(id, name);
+  return User$LoggedIn(id, name);
 }
-```
 
-## Working with Lists
-
-Lists in Gleam JavaScript are custom objects, not arrays.
-
-### List Helpers
-
-```javascript
-import { List, Empty } from "../gleam.mjs";
-
-// Check if list is empty
-List.isEmpty(myList)
-
-// For non-empty lists
-List.first(myList)  // Get first element
-List.rest(myList)   // Get tail
-
-// Convert array to List
-function arrayToList(arr) {
-  let list = new Empty();
-  for (let i = arr.length - 1; i >= 0; i--) {
-    list = new List(arr[i], list);
+// Accessing fields
+export function getUserId(user) {
+  // Field access pattern: TypeName$VariantName$index
+  if (user["User$LoggedIn$0"] !== undefined) {
+    return Result$Ok(user["User$LoggedIn$0"]);  // id
   }
-  return list;
+  return Result$Error("Guest has no ID");
 }
 ```
 
-See: [External Functions - Lists](https://gleam.run/documentation/externals/)
+## Data Type Mapping
 
-## JavaScript Runtime APIs
+| Gleam | JavaScript | Notes |
+|-------|-----------|-------|
+| `Int` | `number` | |
+| `Float` | `number` | |
+| `String` | `string` | |
+| `Bool` | `boolean` | |
+| `Nil` | `undefined` | |
+| `List(a)` | Object | Use helper functions |
+| `#(a, b)` | Array | `[a, b]` |
+| `Result(a, e)` | Object | Use helper functions |
+| `BitArray` | `Uint8Array` | |
+| Custom types | Object | Tagged with variant |
 
-### Promises
+## Working with Promises
 
-Use `gleam_javascript` for Promise integration:
+Use `gleam/javascript/promise`:
 
 ```gleam
 import gleam/javascript/promise.{type Promise}
 
 @external(javascript, "./async_ffi.mjs", "fetchData")
-pub fn fetch_data(url: String) -> Promise(Result(String, Error))
+fn fetch_data_ffi(url: String) -> Promise(Dynamic)
 
-pub fn get_user_data() {
-  fetch_data("https://api.example.com/user")
-  |> promise.await(fn(result) {
-    case result {
-      Ok(data) -> process_data(data)
-      Error(err) -> handle_error(err)
-    }
-  })
+pub fn fetch_data(url: String) -> Promise(Result(Data, String)) {
+  fetch_data_ffi(url)
+  |> promise.map(decode_data)
+}
+```
+
+```javascript
+// async_ffi.mjs
+export async function fetchData(url) {
+  const response = await fetch(url);
+  return response.json();
 }
 ```
 
 See: [gleam_javascript - Promise](https://hexdocs.pm/gleam_javascript/)
-
-### Fetch API
-
-Use `gleam_fetch` for HTTP requests:
-
-```gleam
-import gleam/fetch
-import gleam/javascript/promise
-
-pub fn get_user(id: String) {
-  let url = "https://api.example.com/users/" <> id
-  fetch.send(fetch.to(url))
-  |> promise.try_await(fetch.read_text_body)
-}
-```
-
-See: [gleam_fetch Documentation](https://hexdocs.pm/gleam_fetch/)
-
-### Console API
-
-```gleam
-import gleam/io
-
-pub fn main() {
-  io.println("Hello from Gleam!")  // Uses console.log on JavaScript
-}
-```
-
-### setTimeout / setInterval
-
-```gleam
-@external(javascript, "./timer_ffi.mjs", "setTimeout")
-pub fn set_timeout(callback: fn() -> Nil, ms: Int) -> Nil
-
-@external(javascript, "./timer_ffi.mjs", "setInterval")
-pub fn set_interval(callback: fn() -> Nil, ms: Int) -> Nil
-```
-
-```javascript
-// timer_ffi.mjs
-export function setTimeout(callback, ms) {
-  globalThis.setTimeout(callback, ms);
-}
-
-export function setInterval(callback, ms) {
-  globalThis.setInterval(callback, ms);
-}
-```
 
 ## NPM Integration
 
@@ -238,67 +239,45 @@ npm install <package-name>
 
 ### Using NPM Packages
 
-Create FFI wrapper:
-
 ```javascript
-// src/moment_ffi.mjs
-import moment from "moment";
+// src/lodash_ffi.mjs
+import { debounce } from "lodash";
 
-export function now() {
-  return moment().format();
-}
-
-export function parse(dateString) {
-  const m = moment(dateString);
-  if (!m.isValid()) {
-    return new Error("Invalid date");
-  }
-  return new Ok(m.format());
+export function debounceFunction(fn, wait) {
+  return debounce(fn, wait);
 }
 ```
 
 ```gleam
-// src/moment.gleam
-@external(javascript, "./moment_ffi.mjs", "now")
-pub fn now() -> String
-
-@external(javascript, "./moment_ffi.mjs", "parse")
-pub fn parse(date_string: String) -> Result(String, Nil)
-```
-
-## Build Tools
-
-### esbuild Integration
-
-Use `esgleam` for bundling:
-
-```bash
-gleam add --dev esgleam
-```
-
-See: [ESGleam Documentation](https://hexdocs.pm/esgleam/)
-
-### Bundling
-
-Create build script:
-
-```javascript
-// build.mjs
-import * as esbuild from "esbuild";
-
-await esbuild.build({
-  entryPoints: ["build/dev/javascript/my_project/my_module.mjs"],
-  bundle: true,
-  outfile: "dist/bundle.js",
-  format: "esm",
-});
+// src/lodash.gleam
+@external(javascript, "lodash", "debounce")
+pub fn debounce(fn: fn() -> Nil, wait: Int) -> fn() -> Nil
 ```
 
 ## Browser APIs
 
+### Fetch API
+
+Use `gleam_fetch`:
+
+```gleam
+import gleam/fetch
+import gleam/javascript/promise
+
+pub fn get_user(id: String) -> Promise(Result(String, fetch.FetchError)) {
+  let url = "https://api.example.com/users/" <> id
+  fetch.send(fetch.to(url))
+  |> promise.try_await(fetch.read_text_body)
+}
+```
+
+See: [gleam_fetch Documentation](https://hexdocs.pm/gleam_fetch/)
+
 ### DOM Manipulation
 
 ```gleam
+pub type Element
+
 @external(javascript, "./dom_ffi.mjs", "getElementById")
 pub fn get_element_by_id(id: String) -> Result(Element, Nil)
 
@@ -308,14 +287,14 @@ pub fn set_inner_html(element: Element, html: String) -> Nil
 
 ```javascript
 // dom_ffi.mjs
-import { Ok, Error } from "../gleam.mjs";
+import { Result$Ok, Result$Error } from "../gleam.mjs";
 
 export function getElementById(id) {
   const element = document.getElementById(id);
   if (element === null) {
-    return new Error(undefined);
+    return Result$Error(undefined);
   }
-  return new Ok(element);
+  return Result$Ok(element);
 }
 
 export function setInnerHTML(element, html) {
@@ -326,7 +305,7 @@ export function setInnerHTML(element, html) {
 ### Event Listeners
 
 ```gleam
-pub type EventListener
+pub type Event
 
 @external(javascript, "./events_ffi.mjs", "addEventListener")
 pub fn add_event_listener(
@@ -343,19 +322,56 @@ export function addEventListener(element, event, handler) {
 }
 ```
 
-## Frontend Frameworks
+### Timers
 
-### Lustre (Gleam's Elm-inspired Framework)
+```gleam
+@external(javascript, "./timer_ffi.mjs", "setTimeout")
+pub fn set_timeout(callback: fn() -> Nil, ms: Int) -> Nil
+```
 
-For full frontend applications:
+```javascript
+// timer_ffi.mjs
+export function setTimeout(callback, ms) {
+  globalThis.setTimeout(callback, ms);
+}
+```
 
-See: [Lustre Documentation](https://hexdocs.pm/lustre/)
+## Error Handling
 
-### React Bindings
+Always convert JavaScript errors to Gleam Results:
 
-For React integration:
+```javascript
+import { Result$Ok, Result$Error } from "../gleam.mjs";
 
-See: [Redraw](https://hexdocs.pm/redraw/) - React bindings for Gleam
+export function riskyOperation(input) {
+  try {
+    const result = doSomethingRisky(input);
+    return Result$Ok(result);
+  } catch (error) {
+    return Result$Error(error.message);
+  }
+}
+```
+
+## Multi-Target Support
+
+Write code that works on both targets:
+
+```gleam
+@external(erlang, "crypto", "strong_rand_bytes")
+@external(javascript, "node:crypto", "randomBytes")
+pub fn random_bytes(size: Int) -> BitArray
+```
+
+Or with fallback:
+
+```gleam
+@external(javascript, "./fast_ffi.mjs", "fastSort")
+pub fn fast_sort(list: List(Int)) -> List(Int) {
+  // Pure Gleam fallback
+  list.sort(list, int.compare)
+}
+```
 
 ## Testing JavaScript Target
 
@@ -368,10 +384,77 @@ Platform-specific tests:
 ```gleam
 @target(javascript)
 pub fn javascript_specific_test() {
-  let assert Ok(result) = javascript_only_function()
-  let assert expected = result
+  let result = javascript_only_function()
+  let assert Ok(value) = result
+  assert value == expected
 }
 ```
+
+## Frontend Frameworks
+
+### Lustre (Recommended)
+
+Gleam's Elm-inspired framework for full frontend applications:
+
+```gleam
+import lustre
+import lustre/element/html
+import lustre/element.{text}
+
+pub fn main() {
+  let app = lustre.simple(init, update, view)
+  let assert Ok(_) = lustre.start(app, "#app", Nil)
+}
+
+fn init(_flags) {
+  0
+}
+
+fn update(model, msg) {
+  case msg {
+    Increment -> model + 1
+    Decrement -> model - 1
+  }
+}
+
+fn view(model) {
+  html.div([], [
+    html.button([event.on_click(Decrement)], [text("-")]),
+    html.p([], [text(int.to_string(model))]),
+    html.button([event.on_click(Increment)], [text("+")]),
+  ])
+}
+```
+
+See: [Lustre Documentation](https://hexdocs.pm/lustre/)
+
+## Build Tools
+
+### esbuild Integration
+
+Use `esgleam` for bundling:
+
+```bash
+gleam add --dev esgleam
+```
+
+Create build script:
+
+```javascript
+// build.mjs
+import * as esbuild from "esbuild";
+import * as gleam from "esgleam";
+
+await esbuild.build({
+  entryPoints: ["build/dev/javascript/my_project/my_module.mjs"],
+  bundle: true,
+  outfile: "dist/bundle.js",
+  format: "esm",
+  plugins: [gleam.plugin()],
+});
+```
+
+See: [ESGleam Documentation](https://hexdocs.pm/esgleam/)
 
 ## Debugging
 
@@ -379,7 +462,6 @@ pub fn javascript_specific_test() {
 
 ```gleam
 import gleam/io
-import gleam/string
 
 pub fn debug(value: anything) -> anything {
   io.debug(value)  // Outputs to console with inspect format
@@ -387,50 +469,66 @@ pub fn debug(value: anything) -> anything {
 }
 ```
 
-### Source Maps
+### Debugging Externals
 
-Enable source maps in your build tool for easier debugging.
+Add logging to FFI files:
 
-## Common Patterns
+```javascript
+export function myFunction(arg) {
+  console.log("Called with:", arg);
+  const result = doSomething(arg);
+  console.log("Result:", result);
+  return result;
+}
+```
 
-### Callback Conversion
+## Best Practices
+
+### DO: Wrap FFI in Safe APIs (MANDATORY)
 
 ```gleam
-// Gleam function
-pub fn process_async(callback: fn(Result(Data, Error)) -> Nil) -> Nil {
-  // Implementation
-}
+// Private FFI function
+@external(javascript, "./api_ffi.mjs", "dangerousCall")
+fn dangerous_call_ffi(input: String) -> Dynamic
 
-// JavaScript FFI
-@external(javascript, "./async_ffi.mjs", "processAsync")
-pub fn process_async_js(callback: fn(Result(Data, Error)) -> Nil) -> Nil
-```
-
-```javascript
-// async_ffi.mjs
-export function processAsync(gleamCallback) {
-  // Convert JavaScript promise to Gleam callback
-  fetch("https://api.example.com/data")
-    .then(response => response.json())
-    .then(data => gleamCallback(new Ok(data)))
-    .catch(error => gleamCallback(new Error(error.message)));
+// Public safe wrapper
+pub fn safe_call(input: String) -> Result(Output, String) {
+  dangerous_call_ffi(input)
+  |> decode_output
+  |> result.map_error(error_to_string)
 }
 ```
 
-### Error Handling
+### DO: Document Platform Requirements (MANDATORY)
 
-Always convert JavaScript errors to Gleam Results:
+```gleam
+/// Fetches data from the browser's localStorage.
+///
+/// **Platform**: JavaScript only (browser environment)
+/// **Requires**: Browser with localStorage API
+///
+@external(javascript, "./storage_ffi.mjs", "getItem")
+pub fn get_item(key: String) -> Result(String, Nil)
+```
 
-```javascript
-import { Ok, Error } from "../gleam.mjs";
+### DO: Test Extensively (MANDATORY)
 
-export function riskyOperation(input) {
-  try {
-    const result = doSomethingRisky(input);
-    return new Ok(result);
-  } catch (error) {
-    return new Error(error.message);
-  }
+Write comprehensive tests for all external functions.
+
+### DON'T: Skip Error Handling (FORBIDDEN)
+
+Always wrap external calls with proper error handling.
+
+### DON'T: Use FFI for Simple Operations (ANTI-PATTERN)
+
+```gleam
+// Bad - unnecessary FFI
+@external(javascript, "./math.mjs", "add")
+pub fn add(a: Int, b: Int) -> Int
+
+// Good - pure Gleam
+pub fn add(a: Int, b: Int) -> Int {
+  a + b
 }
 ```
 
@@ -440,18 +538,17 @@ export function riskyOperation(input) {
 
 - No UTF codepoint pattern matching in bit arrays
 - No `native` endianness option
+- JavaScript lacks tail call optimization
 - Different runtime behavior from Erlang target
-
-See: [External Functions - Platform Limitations](https://gleam.run/documentation/externals/)
 
 ### Performance Considerations
 
-- JavaScript lacks tail call optimization
 - Different garbage collection characteristics
 - Consider target when designing recursive algorithms
+- Lists are not native JavaScript arrays (performance impact)
 
 ---
 
 **Remember**: Use JavaScript interop sparingly. Prefer Gleam implementations when possible for type safety and cross-platform compatibility.
 
-See: [External Functions](../rules/external-functions.md)
+See: [External Functions](../../rules/external-functions.md)

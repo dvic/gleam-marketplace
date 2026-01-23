@@ -68,7 +68,7 @@ Add and configure package dependencies for Gleam projects.
 ### Utilities
 - `envoy` - Environment variables
 - `filepath` - Path operations
-- `birl` - Date/time handling
+- `gleam_time` - Date/time handling
 
 See: [Awesome Gleam](https://github.com/gleam-lang/awesome-gleam)
 

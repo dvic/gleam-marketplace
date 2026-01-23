@@ -7,13 +7,14 @@ description: Guides Claude through integrating Gleam with Erlang and Elixir code
 
 This skill guides Claude Code through integrating Gleam with Erlang and Elixir code.
 
+**IMPORTANT**: Always prefer pure Gleam solutions. Use externals only when there is no suitable alternative.
+
 ## Primary Sources
 
-1. **[Gleam Externals - Erlang](https://gleam.run/documentation/externals/)** - Official FFI guide
+1. **[Gleam Externals Documentation](https://gleam.run/documentation/externals/)** - Official FFI guide
 2. **[Gleam Erlang Package](https://hexdocs.pm/gleam_erlang/)** - Erlang integration utilities
 3. **[Gleam OTP](https://hexdocs.pm/gleam_otp/)** - OTP framework integration
-4. **[Glixir](https://hexdocs.pm/glixir/)** - Elixir OTP interop
-5. **[Gleam FAQ - Elixir Integration](https://gleam.run/frequently-asked-questions/)** - Using Elixir code
+4. **[Gleam FAQ - Elixir Integration](https://gleam.run/frequently-asked-questions/)** - Using Elixir code
 
 ## Erlang Target
 
@@ -33,7 +34,13 @@ gleam run  # Run your main function
 erl -pa build/dev/erlang/*/ebin  # Start Erlang shell with your code
 ```
 
-## External Functions
+## @external Attribute Syntax
+
+**Syntax**: `@external(erlang, "module", "function")`
+
+- **module**: Erlang module name (lowercase with underscores)
+- **function**: Erlang function name
+- **Type annotations are MANDATORY**
 
 ### Basic Erlang External
 
@@ -42,55 +49,78 @@ erl -pa build/dev/erlang/*/ebin  # Start Erlang shell with your code
 pub fn reverse_list(list: List(element)) -> List(element)
 ```
 
-Format: `@external(erlang, "module_name", "function_name")`
+This calls the Erlang `lists:reverse/1` function.
 
 See: [External Functions - Erlang](https://gleam.run/documentation/externals/)
 
-### Erlang Module Naming
+## Type Safety and Testing (CRITICAL)
 
-Erlang modules use lowercase with underscores:
-- `lists` (Erlang standard library)
-- `crypto` (Erlang/OTP module)
-- `my_erlang_module` (your custom module)
+### The Compiler Cannot Verify External Types
+
+From official documentation:
+
+> The Gleam compiler will ensure that all uses of the function will be correct for the annotated types, but **it cannot verify that the function implemented in the other language returns the specified types**.
+
+**You are responsible for ensuring the external function matches the types you declare.**
+
+### Write More Tests (MANDATORY)
+
+Because externals bypass compiler analysis:
+
+- **Write more unit tests than usual** when using external functions
+- Test all edge cases thoroughly
+- Verify type conversions are correct
+- Test error handling paths
+
+```gleam
+pub fn external_function_test() {
+  let result = my_external_function("test")
+  let assert Ok(value) = result
+  assert value == expected
+}
+```
 
 ## Data Type Mapping
 
 ### Gleam to Erlang
 
-| Gleam Type | Erlang Type |
-|------------|-------------|
-| `Int` | Integer |
-| `Float` | Float |
-| `String` | Binary `<<"text"/utf8>>` |
-| `Bool` (`True`/`False`) | Atoms `true`/`false` |
-| `List(a)` | List `[a]` |
-| `#(a, b)` | Tuple `{a, b}` |
-| `Ok(x)` | Tagged tuple `{ok, x}` |
-| `Error(x)` | Tagged tuple `{error, x}` |
-| Custom types | Tagged tuples |
-| `Nil` | Atom `nil` |
+| Gleam Type | Erlang Type | Notes |
+|------------|-------------|-------|
+| `Int` | Integer | |
+| `Float` | Float | |
+| `String` | Binary | `<<"text"/utf8>>` |
+| `Bool` | Atom | `true`/`false` |
+| `Nil` | Atom | `nil` |
+| `List(a)` | List | `[a]` |
+| `#(a, b)` | Tuple | `{a, b}` |
+| `Result(a, e)` | Tagged tuple | `{ok, a}` or `{error, e}` |
+| Custom types | Tagged tuples | |
+| `BitArray` | Binary | |
 
 ### Custom Type Representation
 
 ```gleam
-pub type Result {
-  Ok(value: Int)
-  Error(reason: String)
+pub type Status {
+  Loading
+  Success
+  Error
 }
+```
 
-// In Erlang becomes:
-// {ok, 42}
-// {error, <<"reason"/utf8>>}
+Maps to Erlang atoms: `loading`, `success`, `error`
 
+**PascalCase variants convert to snake_case atoms in Erlang.**
+
+```gleam
 pub type User {
   Guest
   LoggedIn(id: Int, name: String)
 }
-
-// In Erlang becomes:
-// {guest}
-// {logged_in, 123, <<"Alice"/utf8>>}
 ```
+
+Maps to Erlang:
+- `guest` (single atom for variant without fields)
+- `{logged_in, 123, <<"Alice"/utf8>>}` (tagged tuple for variant with fields)
 
 ## Common Erlang Modules
 
@@ -110,35 +140,50 @@ pub fn flatten(list: List(List(a))) -> List(a)
 ### String/Binary Module
 
 ```gleam
+@external(erlang, "string", "trim")
+pub fn trim(s: String) -> String
+
 @external(erlang, "string", "uppercase")
 pub fn uppercase(s: String) -> String
-
-@external(erlang, "binary", "split")
-pub fn split(s: String, pattern: String) -> List(String)
 ```
 
 ### Crypto Module
 
 ```gleam
+import gleam/dynamic.{type Dynamic}
+
 @external(erlang, "crypto", "hash")
-pub fn hash(algorithm: String, data: String) -> BitArray
+fn hash_ffi(algorithm: Dynamic, data: BitArray) -> BitArray
+
+pub fn sha256(data: String) -> BitArray {
+  data
+  |> bit_array.from_string
+  |> hash_ffi(dynamic.from("sha256"), _)
+}
 
 @external(erlang, "crypto", "strong_rand_bytes")
 pub fn random_bytes(n: Int) -> BitArray
 ```
 
+**Important**: Atoms should be passed as `Dynamic` when calling Erlang functions.
+
 ### Timer Module
 
 ```gleam
-@external(erlang, "timer", "sleep")
-pub fn sleep(milliseconds: Int) -> Nil
+import gleam/erlang/process
+
+pub fn sleep(milliseconds: Int) -> Nil {
+  process.sleep(milliseconds)
+}
 ```
+
+Use `gleam/erlang/process.sleep` instead of calling `timer:sleep` directly.
 
 ## Elixir Integration
 
 ### Calling Elixir Modules
 
-Elixir modules require "Elixir." prefix:
+Elixir modules require `Elixir.` prefix:
 
 ```gleam
 @external(erlang, "Elixir.String", "upcase")
@@ -146,24 +191,11 @@ pub fn upcase(string: String) -> String
 
 @external(erlang, "Elixir.Enum", "map")
 pub fn enum_map(list: List(a), f: fn(a) -> b) -> List(b)
-
-@external(erlang, "Elixir.Phoenix.HTML", "safe_to_string")
-pub fn safe_to_string(html: SafeHtml) -> String
 ```
+
+**Important**: The target is still `erlang`, not `elixir`.
 
 See: [External Functions - Elixir](https://gleam.run/documentation/externals/)
-
-### Elixir Data Structures
-
-Elixir maps, structs, and atoms work with Gleam:
-
-```gleam
-// Elixir %{key: "value"} maps to Gleam Dict
-import gleam/dict.{type Dict}
-
-@external(erlang, "Elixir.MyModule", "get_config")
-pub fn get_config() -> Dict(String, String)
-```
 
 ### Using Elixir Macros
 
@@ -189,51 +221,22 @@ See: [Gleam FAQ - Elixir Macros](https://gleam.run/frequently-asked-questions/)
 
 ## OTP Integration
 
-### Erlang Processes
+### Using gleam_otp
 
-Use `gleam_erlang/process`:
+For OTP functionality, use the `gleam_otp` package:
 
 ```gleam
+import gleam/otp/actor
 import gleam/erlang/process.{type Subject}
 
-pub fn spawn_process() {
-  process.start(fn() {
-    // Process logic
-  }, linked: True)
+pub fn start_worker() -> Result(Subject(Message), actor.StartError) {
+  actor.new(initial_state)
+  |> actor.on_message(handle_message)
+  |> actor.start
 }
 ```
 
-See: [gleam_erlang - Process](https://hexdocs.pm/gleam_erlang/gleam/erlang/process.html)
-
-### Calling Erlang gen_server
-
-```gleam
-@external(erlang, "gen_server", "call")
-pub fn gen_server_call(
-  server: Subject(a),
-  request: b,
-  timeout: Int,
-) -> c
-```
-
-**Better approach**: Use `gleam_otp/actor` for type safety:
-
 See: [Gleam OTP Documentation](https://hexdocs.pm/gleam_otp/)
-
-### ETS (Erlang Term Storage)
-
-```gleam
-pub type Table
-
-@external(erlang, "ets", "new")
-pub fn new(name: Atom, options: List(Atom)) -> Table
-
-@external(erlang, "ets", "insert")
-pub fn insert(table: Table, objects: List(#(a, b))) -> Bool
-
-@external(erlang, "ets", "lookup")
-pub fn lookup(table: Table, key: a) -> List(#(a, b))
-```
 
 ### Atoms
 
@@ -246,6 +249,23 @@ pub fn create_atom(name: String) -> Atom {
 ```
 
 See: [gleam_erlang - Atom](https://hexdocs.pm/gleam_erlang/gleam/erlang/atom.html)
+
+### ETS (Erlang Term Storage)
+
+```gleam
+import gleam/erlang/atom.{type Atom}
+
+pub type Table
+
+@external(erlang, "ets", "new")
+pub fn new(name: Atom, options: List(Atom)) -> Table
+
+@external(erlang, "ets", "insert")
+pub fn insert(table: Table, objects: List(#(a, b))) -> Bool
+
+@external(erlang, "ets", "lookup")
+pub fn lookup(table: Table, key: a) -> List(#(a, b))
+```
 
 ## Bit Strings / Binary Data
 
@@ -266,11 +286,11 @@ See: [Bit Array Syntax](https://gearsco.de/blog/bit-array-syntax/)
 
 ### Bit Array Options
 
-- Size: `value:32` (32 bits)
-- Type: `int`, `float`, `bytes`, `bits`, `utf8`, `utf16`, `utf32`
-- Signedness: `signed`, `unsigned`
-- Endianness: `big`, `little`, `native`
-- Unit: Multiplier for size
+- **Size**: `value:32` (32 bits)
+- **Type**: `int`, `float`, `bytes`, `bits`, `utf8`, `utf16`, `utf32`
+- **Signedness**: `signed`, `unsigned`
+- **Endianness**: `big`, `little`, `native`
+- **Unit**: Multiplier for size
 
 ```gleam
 <<value:size(32)-unsigned-big-integer>> = data
@@ -278,36 +298,24 @@ See: [Bit Array Syntax](https://gearsco.de/blog/bit-array-syntax/)
 
 ## Calling Erlang Libraries
 
-### Hackney (HTTP Client)
+### HTTP Clients
 
-```gleam
-@external(erlang, "hackney", "request")
-pub fn request(
-  method: Atom,
-  url: String,
-  headers: List(#(String, String)),
-  body: String,
-  options: List(a),
-) -> Result(Response, Error)
-```
+For HTTP requests, prefer Gleam packages:
+- [gleam_http](https://hexdocs.pm/gleam_http/) - HTTP types
+- [gleam_httpc](https://hexdocs.pm/gleam_httpc/) - HTTP client
+- [gleam_fetch](https://hexdocs.pm/gleam_fetch/) - Fetch API (JavaScript/Erlang)
 
-Or use: [gleam_hackney](https://hexdocs.pm/gleam_hackney/)
-
-### Cowboy (HTTP Server)
+### HTTP Servers
 
 For web servers, prefer:
 - [Mist](https://hexdocs.pm/mist/) - Native Gleam HTTP server
 - [Wisp](https://hexdocs.pm/wisp/) - Web framework
 
-### Mnesia (Database)
+### Database
 
-```gleam
-@external(erlang, "mnesia", "create_table")
-pub fn create_table(name: Atom, options: List(#(Atom, anything))) -> Result(Atom, Error)
-
-@external(erlang, "mnesia", "transaction")
-pub fn transaction(fn: fn() -> a) -> Result(a, Error)
-```
+For databases:
+- [gleam_pgo](https://hexdocs.pm/gleam_pgo/) - PostgreSQL
+- [sqlight](https://hexdocs.pm/sqlight/) - SQLite
 
 ## Compiling with Elixir Code
 
@@ -335,6 +343,8 @@ Gleam module `my_package/my_module` becomes Erlang module `:my_package@my_module
 ### Converting Erlang Error Tuples
 
 ```gleam
+import gleam/erlang/atom
+
 @external(erlang, "file", "read_file")
 fn do_read_file(path: String) -> Result(BitArray, Atom)
 
@@ -353,13 +363,31 @@ pub fn read_file(path: String) -> Result(String, FileError) {
 
 ### Erlang Exceptions
 
-Erlang exceptions become Gleam panics. Wrap risky Erlang calls:
+Erlang exceptions become Gleam panics. Wrap risky Erlang calls with proper error handling.
+
+## Multi-Target Support
+
+Write code that works on both targets:
 
 ```gleam
-pub fn safe_erlang_call() -> Result(Value, Error) {
-  case attempt_erlang_operation() {
-    value -> Ok(value)
-    _ -> Error(OperationFailed)
+@external(erlang, "crypto", "strong_rand_bytes")
+@external(javascript, "node:crypto", "randomBytes")
+pub fn random_bytes(size: Int) -> BitArray
+```
+
+Or with fallback:
+
+```gleam
+@external(erlang, "lists", "reverse")
+pub fn reverse(list: List(a)) -> List(a) {
+  // Pure Gleam fallback
+  do_reverse(list, [])
+}
+
+fn do_reverse(remaining: List(a), reversed: List(a)) -> List(a) {
+  case remaining {
+    [] -> reversed
+    [x, ..xs] -> do_reverse(xs, [x, ..reversed])
   }
 }
 ```
@@ -368,8 +396,11 @@ pub fn safe_erlang_call() -> Result(Value, Error) {
 
 ```gleam
 pub fn erlang_interop_test() {
-  let assert [3, 2, 1] = reverse_list([1, 2, 3])
-  let assert "HELLO" = uppercase("hello")
+  let reversed = reverse_list([1, 2, 3])
+  let assert [3, 2, 1] = reversed
+
+  let upper = uppercase("hello")
+  let assert "HELLO" = upper
 }
 ```
 
@@ -390,7 +421,7 @@ pub fn sum(list: List(Int), acc: Int) -> Int {
   }
 }
 
-// Not tail recursive
+// Not tail recursive (uses stack)
 pub fn sum_bad(list: List(Int)) -> Int {
   case list {
     [] -> 0
@@ -436,6 +467,57 @@ pub fn debug(value: a) -> a {
 }
 ```
 
+## Best Practices
+
+### DO: Wrap FFI in Safe APIs (MANDATORY)
+
+```gleam
+// Private FFI function
+@external(erlang, "my_erlang_lib", "risky_function")
+fn do_risky_function(arg: String) -> Dynamic
+
+// Public safe wrapper
+pub fn safe_function(arg: String) -> Result(Value, Error) {
+  do_risky_function(arg)
+  |> decode_response
+  |> result.map_error(error_to_string)
+}
+```
+
+### DO: Document Platform Requirements (MANDATORY)
+
+```gleam
+/// Hashes data using SHA-256.
+///
+/// **Platform**: Erlang only
+/// **Requires**: Erlang crypto module
+///
+pub fn sha256(data: String) -> BitArray {
+  // ...
+}
+```
+
+### DO: Test Extensively (MANDATORY)
+
+Write comprehensive tests for all external functions.
+
+### DON'T: Skip Error Handling (FORBIDDEN)
+
+Always wrap external calls with proper error handling.
+
+### DON'T: Use FFI for Simple Operations (ANTI-PATTERN)
+
+```gleam
+// Bad - unnecessary FFI
+@external(erlang, "math", "add")
+pub fn add(a: Int, b: Int) -> Int
+
+// Good - pure Gleam
+pub fn add(a: Int, b: Int) -> Int {
+  a + b
+}
+```
+
 ## Common Patterns
 
 ### Wrapping Erlang Libraries
@@ -443,34 +525,34 @@ pub fn debug(value: a) -> a {
 Create type-safe wrappers for Erlang code:
 
 ```gleam
+import gleam/dynamic.{type Dynamic}
+
 // Low-level external
 @external(erlang, "my_erlang_lib", "risky_function")
-fn do_risky_function(arg: String) -> anything
+fn do_risky_function(arg: String) -> Dynamic
 
 // Safe wrapper
 pub fn safe_function(arg: String) -> Result(Value, Error) {
-  case do_risky_function(arg) {
-    #("ok", value) -> Ok(value)
-    #("error", reason) -> Error(ConvertReason(reason))
-    _ -> Error(UnexpectedResponse)
-  }
+  let decoder = dynamic.tuple2(
+    dynamic.string,
+    decode_value,
+  )
+
+  do_risky_function(arg)
+  |> decoder
+  |> result.then(fn(tuple) {
+    case tuple {
+      #("ok", value) -> Ok(value)
+      #("error", _) -> Error(OperationFailed)
+      _ -> Error(UnexpectedResponse)
+    }
+  })
+  |> result.map_error(fn(_) { DecodeFailed })
 }
-```
-
-### Port Communication
-
-For external programs:
-
-```gleam
-@external(erlang, "erlang", "open_port")
-pub fn open_port(name: #(Atom, String), options: List(Atom)) -> Port
-
-@external(erlang, "erlang", "port_command")
-pub fn port_command(port: Port, data: BitArray) -> Bool
 ```
 
 ---
 
 **Remember**: Gleam's Erlang target gives you full access to the BEAM ecosystem. Wrap external code for type safety.
 
-See: [External Functions](../rules/external-functions.md)
+See: [External Functions](../../rules/external-functions.md)

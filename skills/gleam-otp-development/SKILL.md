@@ -140,7 +140,7 @@ Test supervision behavior:
 - Child restarts on crash
 - Supervisor respects max restart limits
 
-See: [Testing Guide](../rules/testing-practices.md)
+See: [Testing Guide](../../rules/testing-practices.md)
 
 ## Monitoring and Debugging
 
@@ -166,7 +166,7 @@ Integrate logging:
 
 ## Common Anti-Patterns
 
-Refer to: [OTP Anti-Patterns](../rules/otp-patterns.md)
+Refer to: [OTP Anti-Patterns](../../rules/otp-patterns.md)
 
 Key anti-patterns to avoid:
 - Processes as state (use variables instead)
@@ -234,7 +234,7 @@ Find complete OTP application examples:
 - Organizing code (use modules)
 - Holding simple state (use variables)
 
-See: [OTP Patterns](../rules/otp-patterns.md)
+See: [OTP Patterns](../../rules/otp-patterns.md)
 
 ---
 

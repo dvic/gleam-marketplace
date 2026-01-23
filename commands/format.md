@@ -42,15 +42,6 @@ Format Gleam code according to official style guidelines.
 - Function call formatting
 - Pipe operator formatting
 
-## Configuration
-
-In `gleam.toml`:
-
-```toml
-[tools.gleam_fmt]
-max_width = 100
-```
-
 ## Pre-commit Hook
 
 Create `.git/hooks/pre-commit`:

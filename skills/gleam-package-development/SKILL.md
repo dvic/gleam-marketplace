@@ -69,7 +69,7 @@ See: [gleam.toml Documentation](https://gleam.run/writing-gleam/gleam-toml/)
 4. **Minimal exports** - Only export public API
 5. **Comprehensive documentation** - Every public function
 
-See: [Coding Standards](../rules/coding-standards.md)
+See: [Coding Standards](../../rules/coding-standards.md)
 
 ### Module Organization
 
@@ -119,7 +119,7 @@ pub fn parse(input: String) -> Result(Json, ParseError) {
 - Comprehensive test coverage
 - Clear documentation
 
-See: [Anti-patterns - Library Panicking](../rules/coding-standards.md)
+See: [Anti-patterns - Library Panicking](../../rules/coding-standards.md)
 
 ### Application Packages
 
@@ -178,7 +178,7 @@ pub fn my_function(input: String) -> Result(Output, Error) {
 }
 ```
 
-See: [External Functions](../rules/external-functions.md)
+See: [External Functions](../../rules/external-functions.md)
 
 ### Target-Specific Code
 

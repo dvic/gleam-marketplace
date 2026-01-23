@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(jj log:*)",
+      "WebFetch(domain:gleam.run)",
+      "mcp__gleam_packages__get_package_info",
+      "mcp__gleam_packages__get_modules",
+      "mcp__gleam_packages__get_module_info"
+    ]
+  }
+}

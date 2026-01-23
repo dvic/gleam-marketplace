@@ -73,8 +73,6 @@ Use this agent when:
 
 ## Key References
 
-- [Coding Standards](../rules/coding-standards.md)
-- [OTP Patterns](../rules/otp-patterns.md)
 - [Package Development](../skills/gleam-package-development/skill.md)
 - [Gleam Conventions](https://github.com/gleam-lang/website/blob/patterns/documentation/conventions-patterns-anti-patterns.djot)
 
