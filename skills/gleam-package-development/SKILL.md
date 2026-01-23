@@ -211,7 +211,7 @@ gleam test --target erlang     # Erlang target
 gleam test --target javascript # JavaScript target
 ```
 
-See: [Testing Skill](../skills/gleam-testing/skill.md)
+See: [Testing Skill](../skills/gleam-testing/SKILL.md)
 
 ### Example-Based Tests
 

@@ -104,7 +104,7 @@ Then bundle with esbuild or other bundler.
 
 - [Writing Gleam](https://gleam.run/writing-gleam/)
 - [Coding Standards](../rules/coding-standards.md)
-- [Deployment](../skills/gleam-deployment/skill.md)
+- [Deployment](../skills/gleam-deployment/SKILL.md)
 
 ## Best Practices
 

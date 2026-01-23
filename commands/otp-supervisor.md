@@ -177,7 +177,7 @@ fn handle_message(message, state) {
 
 - [Gleam OTP - Supervisor](https://hexdocs.pm/gleam_otp/gleam/otp/supervisor.html)
 - [OTP Patterns](../rules/otp-patterns.md)
-- [OTP Development Skill](../skills/gleam-otp-development/skill.md)
+- [OTP Development Skill](../skills/gleam-otp-development/SKILL.md)
 - [Using Supervisors Tutorial](https://vpgleam.substack.com/p/gleam-otp-using-supervisors)
 
 ## Best Practices

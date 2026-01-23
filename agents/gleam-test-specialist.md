@@ -117,7 +117,7 @@ pub fn multiple_cases_test() {
 ## Key References
 
 - [Testing Practices](../rules/testing-practices.md)
-- [Testing Skill](../skills/gleam-testing/skill.md)
+- [Testing Skill](../skills/gleam-testing/SKILL.md)
 - [Gleeunit Documentation](https://hexdocs.pm/gleeunit/)
 - [Let Assert Guide](https://tour.gleam.run/advanced-features/let-assert/)
 

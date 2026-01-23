@@ -168,11 +168,11 @@ fn with_auth(
 
 ## Key References
 
-- [Web Development Skill](../skills/gleam-web-development/skill.md)
+- [Web Development Skill](../skills/gleam-web-development/SKILL.md)
 - [Wisp Documentation](https://hexdocs.pm/wisp/)
 - [Mist Documentation](https://hexdocs.pm/mist/)
 - [Deployment Guide](https://gleam.run/deployment/fly/)
-- [Testing Web Apps](../skills/gleam-testing/skill.md)
+- [Testing Web Apps](../skills/gleam-testing/SKILL.md)
 
 ## Best Practices
 

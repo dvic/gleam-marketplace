@@ -104,7 +104,7 @@ specific = "= 1.2.3"                     # Exact version
 ## References
 
 - [gleam.toml - Dependencies](https://gleam.run/writing-gleam/gleam-toml/)
-- [Package Development](../skills/gleam-package-development/skill.md)
+- [Package Development](../skills/gleam-package-development/SKILL.md)
 - [Hex.pm](https://hex.pm/)
 
 ## Best Practices
