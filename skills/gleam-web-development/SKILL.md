@@ -5,500 +5,630 @@ description: Guides Claude through Gleam backend web development with Wisp and M
 
 # Gleam Web Development Skill
 
-This skill guides Claude Code through Gleam web development workflows.
+This skill guides Claude through **backend web development** with Wisp and Mist, following official examples from the Wisp repository.
 
 ## Primary Sources
 
 1. **[Wisp Documentation](https://hexdocs.pm/wisp/)** - Practical web framework
-2. **[Mist Documentation](https://hexdocs.pm/mist/)** - HTTP server
-3. **[Lustre Documentation](https://hexdocs.pm/lustre/)** - Frontend framework
-4. **[Gleam HTTP Documentation](https://hexdocs.pm/gleam_http/)** - HTTP types
-5. **[Deploying to Fly.io](https://gleam.run/deployment/fly/)** - Deployment guide
+2. **[Wisp Examples](https://github.com/lpil/wisp/tree/main/examples)** - Official examples (this skill is based on these)
+3. **[Mist Documentation](https://hexdocs.pm/mist/)** - HTTP server
+4. **[Gleam HTTP](https://hexdocs.pm/gleam_http/)** - HTTP types
 
-## Web Stack Components
+## Project Structure
 
-### Backend Frameworks
-- **[Wisp](https://hexdocs.pm/wisp/)** (v2.2.0) - Practical server-side framework
-- **[Mist](https://hexdocs.pm/mist/)** (v5.0.4) - Lightweight HTTP server
-- **[Arctic](https://hexdocs.pm/arctic/)** - Fast response times, serverless-friendly
+Every Wisp project follows this structure:
 
-### Frontend Frameworks
-- **[Lustre](https://hexdocs.pm/lustre/)** (v5.5.2) - Elm-inspired framework for SPAs, HTML templates, server components
-- **[Nakai](https://hexdocs.pm/nakai/)** - HTML generation library
-
-### HTTP Clients
-- **[Gleam HTTP Client (httpc)](https://hexdocs.pm/gleam_httpc/)** - Erlang's built-in HTTP client
-- **[Gleam Fetch](https://hexdocs.pm/gleam_fetch/)** - JavaScript Fetch API
-- **[Hackney](https://hexdocs.pm/gleam_hackney/)** - Alternative Erlang HTTP client
-
-## Handler Pattern: Parse → Process → Present
-
-**ALL handlers should follow this three-part structure:**
-
-### 1. PARSE - Extract and Validate Input
-
-Extract data from the request and validate it:
-
-```gleam
-fn create_user(req: Request, ctx: Context) -> Response {
-  // Parse JSON body
-  use json_body <- wisp.require_json(req)
-
-  // Decode and validate
-  let result = {
-    use request <- result.try(
-      decode.run(json_body, user_request_decoder())
-      |> result.map_error(DecodeError),
-    )
-
-    // Domain validation
-    use validated_user <- result.try(
-      user.new(request.email, request.name)
-      |> result.map_error(DomainError),
-    )
-
-    // Continue to process step...
-  }
-}
+```
+src/
+├── app.gleam                    # Entry point
+└── app/
+    ├── router.gleam             # Routing (pattern matching)
+    ├── web.gleam                # Middleware stack + Context type
+    └── web/
+        ├── people.gleam         # Feature module
+        └── products.gleam       # Feature module
 ```
 
-**Parse step includes:**
-- Query parameters: `wisp.get_query(req)`
-- Path parameters: passed as function arguments
-- JSON body: `wisp.require_json(req)` + `decode.run()`
-- Headers: `wisp.get_header(req, "...")`
-- Domain validation: `domain_type.new(...)`
-
-### 2. PROCESS - Execute Business Logic
-
-Perform the actual operation (database, external API, computation):
+## Entry Point (app.gleam)
 
 ```gleam
-fn create_user(req: Request, ctx: Context) -> Response {
-  use json_body <- wisp.require_json(req)
-
-  let result = {
-    // Parse (from step 1)
-    use request <- result.try(decode.run(json_body, decoder()))
-    use validated_user <- result.try(user.new(request.email, request.name))
-
-    // PROCESS - Business logic
-    db.create_user(ctx.db, validated_user)
-    |> result.map_error(DatabaseError)
-  }
-
-  // Continue to present step...
-}
-```
-
-**Process step includes:**
-- Database operations
-- External API calls
-- Business calculations
-- State modifications
-
-### 3. PRESENT - Convert Result to HTTP Response
-
-Transform the result into an HTTP response:
-
-```gleam
-fn create_user(req: Request, ctx: Context) -> Response {
-  use json_body <- wisp.require_json(req)
-
-  let result = {
-    use request <- result.try(decode.run(json_body, decoder()))
-    use validated_user <- result.try(user.new(request.email, request.name))
-    db.create_user(ctx.db, validated_user) |> result.map_error(DatabaseError)
-  }
-
-  // PRESENT - Convert to HTTP response
-  case result {
-    Ok(created_user) -> web.created(user_to_json(created_user))
-    Error(DecodeError(errors)) -> web.error_response(web.ValidationError(errors))
-    Error(DomainError(user.InvalidEmail)) ->
-      web.error_response(web.BadRequest("Invalid email"))
-    Error(DatabaseError(_)) ->
-      web.error_response(web.InternalError("Failed to create user"))
-  }
-}
-```
-
-**Present step includes:**
-- Success responses: `web.json_response()`, `web.created()`, `web.no_content()`
-- Error responses: `web.error_response()`
-- Domain to JSON conversion: `to_json()` functions
-
-### Complete Example: Create Endpoint
-
-```gleam
-fn create_shop(req: Request, ctx: Context) -> Response {
-  use json_body <- wisp.require_json(req)
-
-  let result = {
-    // 1. PARSE - Decode and validate
-    use request <- result.try(
-      decode.run(json_body, create_shop_decoder())
-      |> result.map_error(DecodeError),
-    )
-
-    // Generate ID and timestamp
-    let shop_id = id.new_shop_id(uuid.v7() |> uuid.to_string)
-    let now = timestamp.system_time()
-
-    // Domain validation
-    use new_shop <- result.try(
-      shop.new(
-        id: shop_id,
-        name: request.name,
-        slug: request.slug,
-        email: request.email,
-        created_at: now,
-      )
-      |> result.map_error(fn(err) {
-        case err {
-          shop.EmptyName ->
-            DecodeError([
-              decode.DecodeError(
-                expected: "Non-empty string",
-                found: "Empty string",
-                path: ["name"],
-              ),
-            ])
-          shop.InvalidSlug(reason) ->
-            DecodeError([
-              decode.DecodeError(
-                expected: "Valid slug",
-                found: reason,
-                path: ["slug"],
-              ),
-            ])
-          // ... other validations
-        }
-      }),
-    )
-
-    // 2. PROCESS - Database operation
-    db_shop.create(ctx.db, new_shop) |> result.map_error(DatabaseError)
-  }
-
-  // 3. PRESENT - HTTP response
-  case result {
-    Ok(created_shop) -> web.created(shop.to_json(created_shop))
-    Error(DecodeError(errors)) -> web.error_response(web.ValidationError(errors))
-    Error(DatabaseError(db_shop.DatabaseError(pog_error))) -> {
-      // Handle specific database errors
-      case pog_error {
-        pog.ConstraintViolated(constraint: "shops_slug_key", ..) ->
-          web.error_response(
-            web.ValidationError([
-              decode.DecodeError(
-                expected: "Unique slug",
-                found: "A shop with this slug already exists",
-                path: ["slug"],
-              ),
-            ]),
-          )
-        _ -> web.error_response(web.InternalError("Failed to create shop"))
-      }
-    }
-    Error(DatabaseError(_)) ->
-      web.error_response(web.InternalError("Failed to create shop"))
-  }
-}
-```
-
-### List Endpoint with Query Parameters
-
-```gleam
-fn list_shops(req: Request, ctx: Context) -> Response {
-  // 1. PARSE - Query parameters
-  let query_params = wisp.get_query(req)
-
-  let page =
-    list.key_find(query_params, "page")
-    |> result.try(int.parse)
-    |> result.unwrap(1)
-
-  let limit =
-    list.key_find(query_params, "limit")
-    |> result.try(int.parse)
-    |> result.unwrap(50)
-    |> int.clamp(1, 100)  // Validate range
-
-  let search = list.key_find(query_params, "search") |> option.from_result
-  let status = list.key_find(query_params, "status") |> option.from_result
-
-  // 2. PROCESS - Database query
-  let result = db_shop.list(ctx.db, search, status, page, limit)
-
-  // 3. PRESENT - HTTP response
-  case result {
-    Ok(paginated) -> web.json_response(shop.paginated_encoder(paginated), 200)
-    Error(db_error) -> web.error_response(web.InternalError("Failed to list shops"))
-  }
-}
-```
-
-### Update Endpoint
-
-```gleam
-fn update_shop(req: Request, ctx: Context, id_string: String) -> Response {
-  use json_body <- wisp.require_json(req)
-
-  let result = {
-    // 1. PARSE - Decode payload and ID
-    use update_payload <- result.try(
-      decode.run(json_body, shop_update_decoder())
-      |> result.map_error(DecodeError),
-    )
-
-    let shop_id = id.new_shop_id(id_string)
-
-    // 2. PROCESS - Update operation
-    db_shop.update(
-      ctx.db,
-      shop_id,
-      update_payload.status,
-      update_payload.stripe_account_id,
-    )
-    |> result.map_error(DatabaseError)
-  }
-
-  // 3. PRESENT - HTTP response
-  case result {
-    Ok(Nil) -> web.no_content()
-    Error(DecodeError(errors)) -> web.error_response(web.ValidationError(errors))
-    Error(DatabaseError(db_shop.ShopIdNotFound)) ->
-      web.error_response(web.NotFound("Shop not found"))
-    Error(DatabaseError(_)) ->
-      web.error_response(web.InternalError("Failed to update shop"))
-  }
-}
-```
-
-### Get Endpoint
-
-```gleam
-fn get_shop(ctx: Context, id_string: String) -> Response {
-  let result = {
-    // 1. PARSE - Path parameter
-    let shop_id = id.new_shop_id(id_string)
-
-    // 2. PROCESS - Database query
-    db_shop.find_by_id(ctx.db, shop_id)
-  }
-
-  // 3. PRESENT - HTTP response
-  case result {
-    Ok(shop) -> web.json_response(shop.to_json(shop), 200)
-    Error(db_shop.InvalidUuid) ->
-      web.error_response(web.BadRequest("Invalid UUID"))
-    Error(db_shop.ShopIdNotFound) ->
-      web.error_response(web.NotFound("Shop not found"))
-    Error(db_shop.DatabaseError(_)) ->
-      web.error_response(web.InternalError("Failed to get shop"))
-  }
-}
-```
-
-## Common Workflows
-
-### Creating a New Web Project
-
-```bash
-gleam new my_web_app
-cd my_web_app
-gleam add wisp mist gleam_http gleam_erlang
-```
-
-See: [Writing Gleam](https://gleam.run/writing-gleam/)
-
-### Basic Wisp Application Structure
-
-```gleam
-import wisp
-import wisp/wisp_mist
-import mist
 import gleam/erlang/process
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
+import mist
+import wisp
+import wisp_mist
+import app/router
+import app/web.{Context}
 
 pub fn main() {
+  // Configure logger for web application defaults
+  wisp.configure_logger()
+  
+  // In production, load from environment/config
   let secret_key_base = wisp.random_string(64)
+  
+  // Create context with dependencies
+  let ctx = Context(
+    db: db_connection,
+    static_directory: static_directory(),
+  )
+  
+  // Partially apply context to handler
+  let handler = router.handle_request(_, ctx)
+  
   let assert Ok(_) =
-    handle_request
-    |> wisp_mist.handler(secret_key_base)
+    wisp_mist.handler(handler, secret_key_base)
     |> mist.new
     |> mist.port(8000)
-    |> mist.start_http
+    |> mist.start
 
   process.sleep_forever()
 }
 
-fn handle_request(req: Request(Connection)) -> Response(ResponseData) {
-  use req <- middleware(req)
+pub fn static_directory() -> String {
+  let assert Ok(priv_directory) = wisp.priv_directory("app")
+  priv_directory <> "/static"
+}
+```
 
+## Context Type (app/web.gleam)
+
+The Context holds dependencies that handlers need:
+
+```gleam
+import wisp
+
+/// Context holds dependencies for request handlers.
+/// Add database connections, API keys, config, etc.
+pub type Context {
+  Context(
+    db: Database,
+    static_directory: String,
+  )
+}
+
+/// The middleware stack. This is the RECOMMENDED stack for most apps.
+pub fn middleware(
+  req: wisp.Request,
+  handle_request: fn(wisp.Request) -> wisp.Response,
+) -> wisp.Response {
+  // Allow browsers to simulate PUT/DELETE via _method parameter
+  let req = wisp.method_override(req)
+  
+  // Log request info
+  use <- wisp.log_request(req)
+  
+  // Return 500 if handler crashes
+  use <- wisp.rescue_crashes
+  
+  // Rewrite HEAD to GET with empty body
+  use req <- wisp.handle_head(req)
+  
+  // CSRF protection for non-GET/HEAD requests
+  use req <- wisp.csrf_known_header_protection(req)
+  
+  handle_request(req)
+}
+
+/// Middleware with static file serving
+pub fn middleware_with_static(
+  req: wisp.Request,
+  ctx: Context,
+  handle_request: fn(wisp.Request) -> wisp.Response,
+) -> wisp.Response {
+  let req = wisp.method_override(req)
+  use <- wisp.log_request(req)
+  use <- wisp.rescue_crashes
+  use req <- wisp.handle_head(req)
+  use req <- wisp.csrf_known_header_protection(req)
+  
+  // Serve static files from /static/* 
+  use <- wisp.serve_static(req, under: "/static", from: ctx.static_directory)
+  
+  handle_request(req)
+}
+```
+
+## Router (app/router.gleam)
+
+Use pattern matching on `wisp.path_segments(req)`:
+
+```gleam
+import gleam/http.{Get, Post, Delete}
+import wisp.{type Request, type Response}
+import app/web.{type Context}
+import app/web/people
+import app/web/products
+
+pub fn handle_request(req: Request, ctx: Context) -> Response {
+  use req <- web.middleware(req)
+  
+  // Pattern match on path segments
   case wisp.path_segments(req) {
+    // GET /
     [] -> home_page(req)
-    ["api", "users"] -> list_users(req)
-    ["api", "users", id] -> get_user(req, id)
+    
+    // /people and /people/:id
+    ["people"] -> people.all(req, ctx)
+    ["people", id] -> people.one(req, ctx, id)
+    
+    // /products and /products/:id
+    ["products"] -> products.all(req, ctx)
+    ["products", id] -> products.one(req, ctx, id)
+    
+    // 404 for everything else
     _ -> wisp.not_found()
   }
 }
-```
 
-For complete examples, see: [Wisp Documentation](https://hexdocs.pm/wisp/)
-
-### Routing Patterns
-
-Consult Wisp routing documentation:
-- Path parameters: [Wisp - Routing](https://hexdocs.pm/wisp/)
-- Query parameters: [Wisp - Request](https://hexdocs.pm/wisp/wisp.html#path_segments)
-- Request methods: [Gleam HTTP - Methods](https://hexdocs.pm/gleam_http/)
-
-### JSON APIs
-
-Use `gleam/json` for JSON handling:
-- Encoding: [gleam/json - Encoding](https://hexdocs.pm/gleam_json/)
-- Decoding: [gleam/json - Decoding](https://hexdocs.pm/gleam_json/)
-
-### Database Integration
-
-Common database libraries:
-- **[Pog](https://hexdocs.pm/pog/)** - PostgreSQL client
-- **[SQLight](https://hexdocs.pm/sqlight/)** - SQLite
-- **[Cake](https://hexdocs.pm/cake/)** - SQL query builder (PostgreSQL, SQLite, MariaDB, MySQL)
-- **[Squirrel](https://hexdocs.pm/squirrel/)** - Type-safe SQL
-
-### Static Files
-
-See Wisp documentation for serving static files:
-[Wisp - Static Assets](https://hexdocs.pm/wisp/)
-
-### Middleware
-
-Middleware patterns in Wisp:
-[Wisp - Middleware](https://hexdocs.pm/wisp/)
-
-## Frontend Development
-
-### Lustre SPAs
-
-For single-page applications:
-[Lustre - Getting Started](https://hexdocs.pm/lustre/)
-
-### Server-Side Rendering
-
-For HTML templates:
-- [Lustre - SSR](https://hexdocs.pm/lustre/)
-- [Nakai](https://hexdocs.pm/nakai/)
-
-## Deployment
-
-### Fly.io Deployment
-
-Complete deployment guide:
-[Deploying Gleam to Fly.io](https://gleam.run/deployment/fly/)
-
-Key steps:
-1. Create Dockerfile with Gleam
-2. Configure fly.toml
-3. Deploy with `flyctl deploy`
-
-### Docker Configuration
-
-See the Fly.io guide for production-ready Dockerfile examples.
-
-### Environment Configuration
-
-Use `envoy` for environment variables:
-[Envoy Documentation](https://hexdocs.pm/envoy/)
-
-## Testing Web Applications
-
-### Request Testing
-
-```gleam
-import wisp/simulate
-import gleam/http
-
-pub fn home_route_test() {
-  let req = simulate.request(http.Get, "/")
-  let response = handle_request(req)
-  let assert 200 = response.status
+fn home_page(req: Request) -> Response {
+  use <- wisp.require_method(req, Get)
+  wisp.html_response("<h1>Welcome</h1>", 200)
 }
 ```
 
-See: [Wisp Testing](https://hexdocs.pm/wisp/)
+## Feature Modules (app/web/people.gleam)
 
-### Integration Testing
-
-Consult testing documentation:
-- [Gleeunit](https://hexdocs.pm/gleeunit/)
-- [Testing Practices](../../rules/testing-practices.md)
-
-## Common Patterns
-
-### Error Responses
+Group related handlers in feature modules:
 
 ```gleam
-fn handle_error(error: MyError) -> Response(ResponseData) {
-  case error {
-    NotFound -> wisp.not_found()
-    Unauthorized -> wisp.response(401)
-    ValidationError(msg) -> wisp.unprocessable_content()
-    _ -> wisp.internal_server_error()
+import gleam/dynamic/decode
+import gleam/http.{Get, Post, Delete}
+import gleam/json
+import gleam/result.{try}
+import wisp.{type Request, type Response}
+import app/web.{type Context}
+
+// TYPES -----------------------------------------------------------------------
+
+pub type Person {
+  Person(name: String, email: String)
+}
+
+// HANDLERS --------------------------------------------------------------------
+
+/// Handle /people - list and create
+pub fn all(req: Request, ctx: Context) -> Response {
+  case req.method {
+    Get -> list_people(ctx)
+    Post -> create_person(req, ctx)
+    _ -> wisp.method_not_allowed([Get, Post])
+  }
+}
+
+/// Handle /people/:id - read, update, delete
+pub fn one(req: Request, ctx: Context, id: String) -> Response {
+  case req.method {
+    Get -> read_person(ctx, id)
+    Delete -> delete_person(ctx, id)
+    _ -> wisp.method_not_allowed([Get, Delete])
+  }
+}
+
+// LIST ------------------------------------------------------------------------
+
+fn list_people(ctx: Context) -> Response {
+  case db.list_people(ctx.db) {
+    Ok(people) -> {
+      let json = json.to_string(json.object([
+        #("people", json.array(people, person_to_json)),
+      ]))
+      wisp.json_response(json, 200)
+    }
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+// CREATE ----------------------------------------------------------------------
+
+fn create_person(req: Request, ctx: Context) -> Response {
+  // Use require_json middleware to parse JSON body
+  use json <- wisp.require_json(req)
+  
+  let result = {
+    // Decode JSON into Person
+    use person <- try(
+      decode.run(json, person_decoder())
+      |> result.replace_error(Nil)
+    )
+    
+    // Save to database
+    use id <- try(db.create_person(ctx.db, person))
+    
+    // Return created response
+    Ok(json.to_string(json.object([#("id", json.string(id))])))
+  }
+  
+  case result {
+    Ok(json) -> wisp.json_response(json, 201)
+    Error(_) -> wisp.unprocessable_content()
+  }
+}
+
+// READ ------------------------------------------------------------------------
+
+fn read_person(ctx: Context, id: String) -> Response {
+  case db.find_person(ctx.db, id) {
+    Ok(person) -> {
+      let json = json.to_string(json.object([
+        #("id", json.string(id)),
+        #("name", json.string(person.name)),
+        #("email", json.string(person.email)),
+      ]))
+      wisp.json_response(json, 200)
+    }
+    Error(_) -> wisp.not_found()
+  }
+}
+
+// DELETE ----------------------------------------------------------------------
+
+fn delete_person(ctx: Context, id: String) -> Response {
+  case db.delete_person(ctx.db, id) {
+    Ok(_) -> wisp.no_content()
+    Error(_) -> wisp.not_found()
+  }
+}
+
+// DECODERS --------------------------------------------------------------------
+
+fn person_decoder() -> decode.Decoder(Person) {
+  use name <- decode.field("name", decode.string)
+  use email <- decode.field("email", decode.string)
+  decode.success(Person(name:, email:))
+}
+
+fn person_to_json(person: Person) -> json.Json {
+  json.object([
+    #("name", json.string(person.name)),
+    #("email", json.string(person.email)),
+  ])
+}
+```
+
+## Request Body Middlewares
+
+### JSON Body
+
+```gleam
+pub fn create_item(req: Request) -> Response {
+  // Parses JSON, returns 415 if wrong content-type, 400 if invalid JSON
+  use json <- wisp.require_json(req)
+  
+  case decode.run(json, item_decoder()) {
+    Ok(item) -> // process item
+    Error(_) -> wisp.unprocessable_content()
   }
 }
 ```
 
-### Request Validation
+### Form Data
 
-Use Result types for validation:
 ```gleam
-fn validate_user_input(req: Request) -> Result(ValidUser, ValidationError) {
-  use body <- result.try(wisp.read_body_as_json(req))
-  use email <- result.try(get_email(body))
-  use name <- result.try(get_name(body))
-  Ok(ValidUser(email, name))
+pub fn handle_form(req: Request) -> Response {
+  // Parses form data (application/x-www-form-urlencoded or multipart/form-data)
+  use formdata <- wisp.require_form(req)
+  
+  // formdata.values is List(#(String, String))
+  // formdata.files is List(#(String, UploadedFile))
+  case list.key_find(formdata.values, "name") {
+    Ok(name) -> // process name
+    Error(_) -> wisp.bad_request("Missing name field")
+  }
 }
 ```
 
-## Security
+### File Uploads
 
-### CORS
+```gleam
+pub fn handle_upload(req: Request) -> Response {
+  use formdata <- wisp.require_form(req)
+  
+  case list.key_find(formdata.files, "document") {
+    Ok(file) -> {
+      // file.path - temporary file path (deleted after request)
+      // file.file_name - reported name (NEVER trust this!)
+      wisp.log_info("File at: " <> file.path)
+      
+      // Move file to permanent location if you want to keep it
+      // simplifile.rename(file.path, permanent_path)
+      
+      wisp.ok()
+    }
+    Error(_) -> wisp.bad_request("Missing file")
+  }
+}
+```
 
-See Wisp documentation for CORS middleware:
-[Wisp - CORS](https://hexdocs.pm/wisp/)
+### Raw String Body
 
-### Authentication
+```gleam
+pub fn handle_csv(req: Request) -> Response {
+  use <- wisp.require_content_type(req, "text/csv")
+  use body <- wisp.require_string_body(req)
+  
+  // body is now a String
+  case csv.parse(body) {
+    Ok(rows) -> // process rows
+    Error(_) -> wisp.unprocessable_content()
+  }
+}
+```
 
-Common patterns:
-- Session-based: Use Wisp's session support
-- JWT: Use [gwt](https://hexdocs.pm/gwt/) library
-- OAuth: Integrate with external libraries
+## Responses
 
-### HTTPS
+### Common Responses
 
-For production HTTPS, see deployment guides:
-- [Fly.io Deployment](https://gleam.run/deployment/fly/)
-- [Mist TLS Configuration](https://hexdocs.pm/mist/)
+```gleam
+// Status codes
+wisp.ok()                    // 200
+wisp.created()               // 201
+wisp.no_content()            // 204 (empty body)
+wisp.bad_request(message)    // 400
+wisp.not_found()             // 404
+wisp.method_not_allowed([Get, Post])  // 405
+wisp.unprocessable_content() // 422
+wisp.internal_server_error() // 500
 
-## Performance
+// With body
+wisp.html_response(body, status)   // HTML with content-type
+wisp.json_response(json, status)   // JSON with content-type
 
-### Caching
+// Building responses
+wisp.ok()
+|> wisp.set_header("content-type", "text/csv")
+|> wisp.string_body(csv_content)
 
-Consider:
-- ETS tables (Erlang)
-- External caching (Redis, Memcached)
+wisp.ok()
+|> wisp.html_body("<h1>Hello</h1>")
+```
 
-### Monitoring
+### File Downloads
 
-Use standard BEAM monitoring tools:
-- Observer (Erlang)
-- Telemetry libraries
-- [Palabres - Logging](https://hexdocs.pm/palabres/)
+```gleam
+// From disk (efficient for large files)
+fn download_report(req: Request) -> Response {
+  wisp.ok()
+  |> wisp.set_header("content-type", "application/pdf")
+  |> wisp.file_download(named: "report.pdf", from: "/path/to/report.pdf")
+}
 
----
+// From memory (for generated content)
+fn download_csv(req: Request) -> Response {
+  let content = bytes_tree.from_string("name,email\nJoe,joe@example.com")
+  
+  wisp.ok()
+  |> wisp.set_header("content-type", "text/csv")
+  |> wisp.file_download_from_memory(named: "export.csv", containing: content)
+}
+```
 
-**When building web applications, always consult official framework documentation for current best practices and examples.**
+### Redirects
+
+```gleam
+wisp.redirect("/login")
+wisp.redirect("/users/" <> id)
+```
+
+## Cookies
+
+```gleam
+const session_cookie = "session_id"
+
+pub fn login(req: Request) -> Response {
+  use formdata <- wisp.require_form(req)
+  
+  case authenticate(formdata) {
+    Ok(user) -> {
+      let session_id = create_session(user)
+      
+      wisp.redirect("/dashboard")
+      |> wisp.set_cookie(
+        req,
+        session_cookie,
+        session_id,
+        wisp.Signed,      // Sign cookie to prevent tampering
+        60 * 60 * 24 * 7, // Max age in seconds (7 days)
+      )
+    }
+    Error(_) -> wisp.redirect("/login?error=invalid")
+  }
+}
+
+pub fn dashboard(req: Request) -> Response {
+  case wisp.get_cookie(req, session_cookie, wisp.Signed) {
+    Ok(session_id) -> {
+      case get_user_from_session(session_id) {
+        Ok(user) -> render_dashboard(user)
+        Error(_) -> wisp.redirect("/login")
+      }
+    }
+    Error(_) -> wisp.redirect("/login")
+  }
+}
+
+pub fn logout(req: Request) -> Response {
+  // Set max_age to 0 to delete cookie
+  case wisp.get_cookie(req, session_cookie, wisp.Signed) {
+    Ok(value) -> {
+      wisp.redirect("/login")
+      |> wisp.set_cookie(req, session_cookie, value, wisp.Signed, 0)
+    }
+    Error(_) -> wisp.redirect("/login")
+  }
+}
+```
+
+## Logging
+
+```gleam
+// Levels from most to least important:
+// emergency, alert, critical, error, warning, notice, info, debug
+
+pub fn handle_request(req: Request) -> Response {
+  use req <- web.middleware(req)
+  
+  case wisp.path_segments(req) {
+    [] -> {
+      wisp.log_debug("Home page accessed")
+      home_page(req)
+    }
+    
+    ["admin"] -> {
+      wisp.log_warning("Admin page accessed")
+      admin_page(req)
+    }
+    
+    ["secret"] -> {
+      wisp.log_error("Secret page discovered!")
+      wisp.not_found()
+    }
+    
+    _ -> {
+      wisp.log_info("404: " <> req.path)
+      wisp.not_found()
+    }
+  }
+}
+```
+
+## Query Parameters
+
+```gleam
+pub fn list_items(req: Request) -> Response {
+  // wisp.get_query returns List(#(String, String))
+  let query = wisp.get_query(req)
+  
+  let page = 
+    list.key_find(query, "page")
+    |> result.try(int.parse)
+    |> result.unwrap(1)
+  
+  let limit = 
+    list.key_find(query, "limit")
+    |> result.try(int.parse)
+    |> result.unwrap(20)
+    |> int.clamp(1, 100)
+  
+  let search = list.key_find(query, "q") |> option.from_result
+  
+  // Use page, limit, search to query database
+}
+```
+
+## Static Files
+
+In middleware:
+
+```gleam
+pub fn middleware(req, ctx, handle_request) {
+  // ... other middleware ...
+  
+  // Serve files from priv/static at /static/*
+  use <- wisp.serve_static(req, under: "/static", from: ctx.static_directory)
+  
+  handle_request(req)
+}
+```
+
+In HTML:
+
+```html
+<link rel="stylesheet" href="/static/styles.css">
+<script src="/static/main.js"></script>
+```
+
+## Testing
+
+```gleam
+import gleeunit
+import gleeunit/should
+import wisp/simulate
+import app/router
+
+pub fn main() {
+  gleeunit.main()
+}
+
+pub fn home_page_test() {
+  let req = simulate.request(http.Get, "/")
+  let response = router.handle_request(req, test_context())
+  
+  response.status
+  |> should.equal(200)
+}
+
+pub fn create_person_test() {
+  let json = "{\"name\": \"Joe\", \"email\": \"joe@example.com\"}"
+  
+  let req = 
+    simulate.request(http.Post, "/people")
+    |> simulate.string_body(json, "application/json")
+  
+  let response = router.handle_request(req, test_context())
+  
+  response.status
+  |> should.equal(201)
+}
+
+fn test_context() -> Context {
+  Context(db: test_db(), static_directory: "priv/static")
+}
+```
+
+## Common Patterns
+
+### Method Dispatch
+
+```gleam
+// Single method
+fn home(req: Request) -> Response {
+  use <- wisp.require_method(req, Get)
+  // Only GET allowed
+}
+
+// Multiple methods
+fn resource(req: Request) -> Response {
+  case req.method {
+    Get -> list()
+    Post -> create(req)
+    _ -> wisp.method_not_allowed([Get, Post])
+  }
+}
+```
+
+### Error Handling
+
+```gleam
+pub fn create(req: Request, ctx: Context) -> Response {
+  use json <- wisp.require_json(req)
+  
+  let result = {
+    use data <- result.try(decode.run(json, decoder()))
+    use validated <- result.try(validate(data))
+    use created <- result.try(db.create(ctx.db, validated))
+    Ok(created)
+  }
+  
+  case result {
+    Ok(item) -> wisp.json_response(to_json(item), 201)
+    Error(ValidationError(msg)) -> wisp.bad_request(msg)
+    Error(DecodeError(_)) -> wisp.unprocessable_content()
+    Error(DbError(_)) -> wisp.internal_server_error()
+  }
+}
+```
+
+### HTML Escaping
+
+```gleam
+// ALWAYS escape user input in HTML
+let name = wisp.escape_html(user_input)
+let html = "<p>Hello, " <> name <> "!</p>"
+```
+
+## References
+
+- [Wisp Documentation](https://hexdocs.pm/wisp/)
+- [Wisp Examples](https://github.com/lpil/wisp/tree/main/examples)
+- [Mist Documentation](https://hexdocs.pm/mist/)
+- [Gleam JSON](https://hexdocs.pm/gleam_json/)
