@@ -73,7 +73,7 @@ Use this agent when:
 
 ## Key References
 
-- [Package Development](../skills/gleam-package-development/skill.md)
+- [Package Development](../skills/gleam-package-development/SKILL.md)
 - [Gleam Conventions](https://github.com/gleam-lang/website/blob/patterns/documentation/conventions-patterns-anti-patterns.djot)
 
 ## Output

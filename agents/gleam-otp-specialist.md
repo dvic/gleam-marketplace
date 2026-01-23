@@ -116,7 +116,7 @@ fn init(children: supervisor.Children) -> supervisor.Children {
 ## Key References
 
 - [OTP Patterns](../rules/otp-patterns.md)
-- [OTP Development Skill](../skills/gleam-otp-development/skill.md)
+- [OTP Development Skill](../skills/gleam-otp-development/SKILL.md)
 - [Gleam OTP Docs](https://hexdocs.pm/gleam_otp/)
 - [Actor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/actor.html)
 - [Supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/supervisor.html)

@@ -238,7 +238,7 @@ fn protected_route(req: Request(Connection)) -> Response(ResponseData) {
 
 - [Wisp Documentation](https://hexdocs.pm/wisp/)
 - [Gleam HTTP](https://hexdocs.pm/gleam_http/)
-- [Web Development Skill](../skills/gleam-web-development/skill.md)
+- [Web Development Skill](../skills/gleam-web-development/SKILL.md)
 
 ## Best Practices
 

@@ -59,7 +59,7 @@ See: [Test Timeouts](https://gearsco.de/blog/gleam-test-timeouts/)
 
 - [Gleeunit Documentation](https://hexdocs.pm/gleeunit/)
 - [Testing Practices](../rules/testing-practices.md)
-- [Testing Skill](../skills/gleam-testing/skill.md)
+- [Testing Skill](../skills/gleam-testing/SKILL.md)
 
 ## Best Practices
 

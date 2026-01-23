@@ -173,7 +173,7 @@ pub fn actor_behavior_test() {
 }
 ```
 
-See: [OTP Development](../skills/gleam-otp-development/skill.md)
+See: [OTP Development](../skills/gleam-otp-development/SKILL.md)
 
 ### Supervision Testing
 
