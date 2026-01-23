@@ -1,6 +1,6 @@
 ---
 name: gleam-web-development
-description: Guides Claude through Gleam web development workflows using Wisp, Mist, and Lustre. Use when building web APIs, REST services, or frontend applications with the Parse→Process→Present pattern.
+description: Guides Claude through Gleam backend web development with Wisp and Mist. Use for REST APIs, web services, and server-side rendering. For frontend/SPA development with Lustre, use the gleam-lustre-development skill instead.
 ---
 
 # Gleam Web Development Skill

@@ -1,409 +1,446 @@
-# /gleam-lustre-component - Create Lustre Component
+# /gleam:lustre-component - Create Lustre Component
 
-Create a reusable Lustre UI component with consistent styling.
+Create a Lustre UI component following idiomatic patterns from lustre_ui.
 
 ## Usage
 
 ```
-/gleam-lustre-component <component_name> <variant>
+/gleam:lustre-component <component_name> [--stateful]
 ```
 
 ## Examples
 
 ```
-/gleam-lustre-component button primary
-/gleam-lustre-component input text
-/gleam-lustre-component card default
+/gleam:lustre-component button
+/gleam:lustre-component accordion --stateful
+/gleam:lustre-component modal --stateful
 ```
 
 ## Workflow
 
-### 1. Create Component Module
+### Simple Component (Stateless Functions)
 
-Create file in `src/app/components/<component_name>.gleam`:
+For UI elements without internal state, create simple view functions:
 
-```gleam
-import lustre/attribute.{class, type_}
-import lustre/element.{type Element}
-import lustre/element/html
-import lustre/event
-
-// Primary variant
-pub fn view_<component_name>_primary(
-  label: String,
-  on_click: Option(msg),
-  is_disabled: Bool,
-) -> Element(msg) {
-  let base_classes = "px-4 py-2 rounded-md font-medium transition-colors"
-  let variant_classes = "bg-black text-white hover:bg-gray-800"
-  let disabled_classes = "opacity-50 cursor-not-allowed"
-
-  let classes = case is_disabled {
-    True -> base_classes <> " " <> variant_classes <> " " <> disabled_classes
-    False -> base_classes <> " " <> variant_classes
-  }
-
-  let attrs = [
-    class(classes),
-    type_("button"),
-    attribute.disabled(is_disabled),
-  ]
-
-  let attrs = case on_click, is_disabled {
-    Some(msg), False -> [event.on_click(msg), ..attrs]
-    _, _ -> attrs
-  }
-
-  html.button(attrs, [element.text(label)])
-}
-
-// Secondary variant
-pub fn view_<component_name>_secondary(
-  label: String,
-  on_click: Option(msg),
-) -> Element(msg) {
-  let classes = "px-4 py-2 rounded-md font-medium border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
-
-  let attrs = case on_click {
-    Some(msg) -> [class(classes), event.on_click(msg), type_("button")]
-    None -> [class(classes), type_("button")]
-  }
-
-  html.button(attrs, [element.text(label)])
-}
-```
-
-### 2. Component Naming Convention
-
-Follow consistent naming pattern:
+**Create `src/components/ui/button.gleam`:**
 
 ```gleam
-// Pattern: view_<component>_<variant>
-pub fn view_button_primary(...)    // Primary button
-pub fn view_button_secondary(...)  // Secondary button
-pub fn view_button_danger(...)     // Danger button
-
-pub fn view_input_text(...)        // Text input
-pub fn view_input_email(...)       // Email input
-pub fn view_input_password(...)    // Password input
-
-pub fn view_card_default(...)      // Default card
-pub fn view_card_elevated(...)     // Elevated card
-```
-
-### 3. Use CSS Variables
-
-Reference design tokens from CSS:
-
-```gleam
-// Instead of hardcoded colors
-let classes = "bg-[var(--bg-primary)] text-[var(--text-primary)]"
-
-// Or use Tailwind if configured
-let classes = "bg-black text-white"
-```
-
-### 4. Make Components Generic
-
-Use type parameter for message type:
-
-```gleam
-pub fn view_button_primary(
-  label: String,
-  on_click: Option(msg),  // Generic msg type
-  is_disabled: Bool,
-) -> Element(msg) {       // Returns Element(msg)
-  // Implementation
-}
-
-// Can be used with any message type
-view_button_primary("Submit", Some(FormSubmitted), False)  // Element(FormMsg)
-view_button_primary("Cancel", Some(UserCanceled), False)   // Element(UserMsg)
-```
-
-### 5. Support Common Props
-
-Common component props pattern:
-
-```gleam
-// Button component signature
-pub fn view_button(
-  label: String,           // Required: button text
-  on_click: Option(msg),   // Optional: click handler
-  is_disabled: Bool,       // Required: disabled state
-  variant: Variant,        // Required: visual style
-) -> Element(msg)
-
-// Input component signature
-pub fn view_input(
-  label: String,           // Required: field label
-  field_name: String,      // Required: field name/id
-  field_type: String,      // Required: input type
-  placeholder: String,     // Required: placeholder text
-  value: String,           // Required: current value
-  errors: List(String),    // Required: validation errors
-  on_input: fn(String) -> msg,  // Required: input handler
-) -> Element(msg)
-```
-
-### 6. Handle Optional Interactions
-
-Pattern for optional event handlers:
-
-```gleam
-pub fn view_button(
-  label: String,
-  on_click: Option(msg),
-) -> Element(msg) {
-  let base_attrs = [
-    class("px-4 py-2 rounded-md"),
-    type_("button"),
-  ]
-
-  let attrs = case on_click {
-    Some(msg) -> [event.on_click(msg), ..base_attrs]
-    None -> base_attrs
-  }
-
-  html.button(attrs, [element.text(label)])
-}
-
-// Usage
-view_button("Enabled", Some(ButtonClicked))  // Clickable
-view_button("Disabled", None)                // Not clickable
-```
-
-### 7. Import Components Where Needed
-
-Import component modules directly in your views:
-
-```gleam
-// In your view module
-import app/components/button
-import app/components/input
-
-pub fn view() {
-  html.div([], [
-    button.view_button_primary("Submit", Some(FormSubmitted), False),
-    input.view_input_text("Email", "email", "", [], OnEmailInput),
-  ])
-}
-```
-
-Note: Gleam doesn't have a `pub use` syntax for re-exporting. Import modules directly where you need them.
-
-### 8. Document Component API
-
-Add module documentation:
-
-```gleam
-//// Button components with various styles and states.
+//// Button components with various styles.
 ////
 //// ## Examples
 ////
 //// ```gleam
-//// import app/components/button
+//// import components/ui/button
 ////
-//// button.view_button_primary("Submit", Some(FormSubmitted), False)
-//// button.view_button_secondary("Cancel", Some(Canceled), False)
+//// button.primary([event.on_click(UserClickedSubmit)], [html.text("Submit")])
+//// button.secondary([event.on_click(UserClickedCancel)], [html.text("Cancel")])
 //// ```
 
+import lustre/attribute.{type Attribute, class}
 import lustre/element.{type Element}
+import lustre/element/html
 
-/// Primary action button with black background
-pub fn view_button_primary(
-  label: String,
-  on_click: Option(msg),
-  is_disabled: Bool,
-) -> Element(msg) {
-  // Implementation
-}
-```
+// TYPES -----------------------------------------------------------------------
 
-## Common Component Patterns
-
-### Button Variants
-
-```gleam
-pub type ButtonVariant {
-  Primary    // Black background, white text
-  Secondary  // White background, border
-  Danger     // Red background
-  Ghost      // Transparent, text only
+/// Button visual variants.
+pub type Variant {
+  Primary
+  Secondary
+  Danger
+  Ghost
 }
 
-pub fn view_button(
-  label: String,
-  on_click: Option(msg),
-  variant: ButtonVariant,
-  is_disabled: Bool,
+// ELEMENTS --------------------------------------------------------------------
+
+/// Render a button with the given variant.
+pub fn button(
+  attributes: List(Attribute(msg)),
+  variant: Variant,
+  children: List(Element(msg)),
 ) -> Element(msg) {
+  let base = "px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2"
+  
   let variant_classes = case variant {
-    Primary -> "bg-black text-white hover:bg-gray-800"
-    Secondary -> "bg-white border border-gray-300 hover:bg-gray-50"
-    Danger -> "bg-red-600 text-white hover:bg-red-700"
-    Ghost -> "bg-transparent text-gray-700 hover:bg-gray-100"
+    Primary -> "bg-black text-white hover:bg-gray-800 focus:ring-gray-500"
+    Secondary -> "bg-white border border-gray-300 hover:bg-gray-50 focus:ring-gray-300"
+    Danger -> "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500"
+    Ghost -> "bg-transparent hover:bg-gray-100 focus:ring-gray-300"
   }
-
-  let base_classes = "px-4 py-2 rounded-md font-medium transition-colors"
-  // ... rest of implementation
-}
-```
-
-### Input with Validation
-
-```gleam
-pub fn view_input(
-  label: String,
-  field_name: String,
-  value: String,
-  errors: List(String),
-  on_input: fn(String) -> msg,
-) -> Element(msg) {
-  let has_errors = !list.is_empty(errors)
-
-  let input_classes = case has_errors {
-    True -> "w-full px-3 py-2 border-2 border-red-300 rounded-md focus:ring-red-500"
-    False -> "w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-black"
-  }
-
-  html.div([class("mb-4")], [
-    html.label([class("block text-sm font-medium mb-1")], [
-      element.text(label),
-    ]),
-    html.input([
-      attribute.name(field_name),
-      attribute.value(value),
-      class(input_classes),
-      event.on_input(on_input),
-    ]),
-    ..case has_errors {
-      True ->
-        list.map(errors, fn(error) {
-          html.p([class("text-sm text-red-600 mt-1")], [element.text(error)])
-        })
-      False -> []
-    },
-  ])
-}
-```
-
-### Status Badge
-
-```gleam
-pub type Status {
-  Active
-  Pending
-  Error
-}
-
-pub fn view_badge(status: Status) -> Element(msg) {
-  let #(label, bg, text) = case status {
-    Active -> #("Active", "bg-green-100", "text-green-800")
-    Pending -> #("Pending", "bg-yellow-100", "text-yellow-800")
-    Error -> #("Error", "bg-red-100", "text-red-800")
-  }
-
-  html.span(
-    [class("px-2 py-1 rounded-full text-xs font-medium " <> bg <> " " <> text)],
-    [element.text(label)],
+  
+  html.button(
+    [class(base <> " " <> variant_classes), attribute.type_("button"), ..attributes],
+    children,
   )
 }
-```
 
-### Loading Spinner
+/// Primary action button.
+pub fn primary(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  button(attributes, Primary, children)
+}
 
-```gleam
-pub fn view_loading_spinner(text: String) -> Element(msg) {
-  html.div([class("flex flex-col items-center justify-center p-8")], [
-    html.div(
-      [class("animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4")],
-      [],
-    ),
-    html.p([class("text-gray-600")], [element.text(text)]),
-  ])
+/// Secondary action button.
+pub fn secondary(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  button(attributes, Secondary, children)
+}
+
+/// Danger/destructive action button.
+pub fn danger(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  button(attributes, Danger, children)
+}
+
+/// Ghost/minimal button.
+pub fn ghost(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  button(attributes, Ghost, children)
+}
+
+// ATTRIBUTES ------------------------------------------------------------------
+
+/// Make button disabled.
+pub fn disabled(value: Bool) -> Attribute(msg) {
+  attribute.disabled(value)
+}
+
+/// Set button type to submit.
+pub fn submit() -> Attribute(msg) {
+  attribute.type_("submit")
 }
 ```
 
-### Modal
+### Complex Component (Stateful Web Component)
+
+For interactive components with internal state, use Web Components pattern:
+
+**Create `src/components/ui/accordion.gleam` (public API):**
 
 ```gleam
-pub fn view_modal(
-  is_visible: Bool,
-  title: String,
-  content: Element(msg),
-  on_close: msg,
-) -> Element(msg) {
-  case is_visible {
-    False -> element.none()
+//// Accordion component with collapsible sections.
+////
+//// ```gleam
+//// accordion.view([], [
+////   accordion.item(
+////     name: "section-1",
+////     attributes: [],
+////     heading: accordion.heading([], 
+////       accordion.trigger([], [html.text("Title")])
+////     ),
+////     panel: accordion.panel([], [
+////       html.p([], [html.text("Content...")])
+////     ]),
+////   ),
+//// ])
+//// ```
+////
+//// ## Accessibility
+////
+//// Follows WAI-ARIA accordion pattern with:
+//// - Keyboard navigation (Arrow keys, Home, End)
+//// - Proper ARIA attributes
+//// - Focus management
 
-    True ->
-      html.div(
-        [
-          class("fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"),
-          event.on_click(on_close),
-        ],
-        [
-          html.div(
-            [
-              class("bg-white rounded-lg p-6 max-w-md w-full"),
-              event.on_click(fn(e) { event.stop_propagation(e) }),
-            ],
-            [
-              html.div([class("flex justify-between items-center mb-4")], [
-                html.h2([class("text-xl font-semibold")], [element.text(title)]),
-                html.button(
-                  [class("text-gray-500 hover:text-gray-700"), event.on_click(on_close)],
-                  [element.text("✕")],
-                ),
-              ]),
-              content,
-            ],
-          ),
-        ],
-      )
+import gleam/bool
+import gleam/list
+import gleam/result
+import lustre
+import lustre/attribute.{type Attribute}
+import lustre/element.{type Element}
+import lustre/element/keyed
+import components/ui/accordion/item
+import components/ui/accordion/root
+
+// TYPES -----------------------------------------------------------------------
+
+/// An accordion item with heading and panel.
+pub opaque type Item(msg) {
+  Item(
+    name: String,
+    attributes: List(Attribute(msg)),
+    heading: Element(msg),
+    panel: Element(msg),
+  )
+}
+
+// REGISTRATION ----------------------------------------------------------------
+
+/// Register all accordion components. Call before using.
+pub fn register() -> Result(Nil, lustre.Error) {
+  use _ <- result.try(root.register())
+  use _ <- result.try(item.register())
+  Ok(Nil)
+}
+
+// ELEMENTS --------------------------------------------------------------------
+
+/// The accordion container.
+///
+/// #### Attributes
+///
+/// [`multiple`](#multiple), [`loop`](#loop), [`default_value`](#default_value).
+///
+/// #### Events
+///
+/// [`on_value_change`](#on_value_change)
+///
+pub fn view(
+  attributes: List(Attribute(msg)),
+  children: List(Item(msg)),
+) -> Element(msg) {
+  keyed.element(root.tag, attributes, {
+    use Item(name:, attributes:, heading:, panel:) <- list.filter_map(children)
+    use <- bool.guard(name == "", Error(Nil))
+    
+    let html = item.element([item.name(name), ..attributes], [heading, panel])
+    Ok(#(name, html))
+  })
+}
+
+/// Create an accordion item.
+pub fn item(
+  name name: String,
+  attributes attributes: List(Attribute(msg)),
+  heading heading: Element(msg),
+  panel panel: Element(msg),
+) -> Item(msg) {
+  Item(name:, attributes:, heading:, panel:)
+}
+
+/// Create accordion heading (contains trigger).
+pub fn heading(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  element.element("accordion-heading", attributes, children)
+}
+
+/// Create accordion trigger button.
+pub fn trigger(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  element.element("accordion-trigger", attributes, children)
+}
+
+/// Create accordion panel (collapsible content).
+pub fn panel(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  element.element("accordion-panel", attributes, children)
+}
+
+// ATTRIBUTES ------------------------------------------------------------------
+
+/// Allow multiple items open at once.
+pub fn multiple() -> Attribute(msg) {
+  attribute.attribute("type", "multiple")
+}
+
+/// Only one item open at a time (default).
+pub fn single() -> Attribute(msg) {
+  attribute.attribute("type", "single")
+}
+
+/// Loop keyboard navigation.
+pub fn loop(value: Bool) -> Attribute(msg) {
+  case value {
+    True -> attribute.attribute("loop", "")
+    False -> attribute.none()
   }
 }
+
+/// Set default open items.
+pub fn default_value(items: List(String)) -> Attribute(msg) {
+  attribute.attribute("value", string.join(items, " "))
+}
+
+// EVENTS ----------------------------------------------------------------------
+
+/// Fired when open items change.
+pub fn on_value_change(handler: fn(List(String)) -> msg) -> Attribute(msg) {
+  event.on("accordion:change", {
+    use items <- decode.field("detail", decode.list(decode.string))
+    decode.success(handler(items))
+  })
+}
 ```
 
-### Empty State
+**Create `src/components/ui/accordion/root.gleam` (internal):**
 
 ```gleam
-pub fn view_empty_state(
-  icon: Element(msg),
-  title: String,
-  description: String,
-  action: Option(#(String, msg)),
-) -> Element(msg) {
-  html.div([class("flex flex-col items-center justify-center p-12 text-center")], [
-    html.div([class("mb-4 text-gray-400")], [icon]),
-    html.h3([class("text-lg font-semibold text-gray-900 mb-2")], [
-      element.text(title),
-    ]),
-    html.p([class("text-gray-600 mb-6")], [element.text(description)]),
-    ..case action {
-      Some(#(label, on_click)) -> [
-        view_button_primary(label, Some(on_click), False),
-      ]
-      None -> []
-    },
+//// Internal: Accordion root web component.
+@internal
+
+import gleam/dynamic/decode
+import gleam/json
+import gleam/set.{type Set}
+import lustre
+import lustre/attribute.{type Attribute}
+import lustre/component
+import lustre/effect.{type Effect}
+import lustre/element.{type Element}
+import lustre/event
+
+// COMPONENT -------------------------------------------------------------------
+
+pub const tag: String = "ui-accordion"
+
+pub fn register() -> Result(Nil, lustre.Error) {
+  let comp = lustre.component(init:, update:, view:, options: [
+    component.adopt_styles(False),
+    
+    component.on_attribute_change("type", fn(value) {
+      case value {
+        "multiple" -> Ok(ParentSetMultiple(True))
+        _ -> Ok(ParentSetMultiple(False))
+      }
+    }),
+    
+    component.on_attribute_change("loop", fn(_) {
+      Ok(ParentToggledLoop)
+    }),
   ])
+  
+  lustre.register(comp, tag)
+}
+
+pub fn element(
+  attributes: List(Attribute(msg)),
+  children: List(Element(msg)),
+) -> Element(msg) {
+  element.element(tag, attributes, children)
+}
+
+// MODEL -----------------------------------------------------------------------
+
+type Model {
+  Model(
+    open: Set(String),
+    multiple: Bool,
+    loop: Bool,
+  )
+}
+
+fn init(_) -> #(Model, Effect(Msg)) {
+  #(Model(open: set.new(), multiple: False, loop: False), effect.none())
+}
+
+// UPDATE ----------------------------------------------------------------------
+
+type Msg {
+  ParentSetMultiple(value: Bool)
+  ParentToggledLoop
+  ChildToggledItem(name: String, open: Bool)
+}
+
+fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
+  case msg {
+    ParentSetMultiple(value) -> 
+      #(Model(..model, multiple: value), effect.none())
+    
+    ParentToggledLoop -> 
+      #(Model(..model, loop: !model.loop), effect.none())
+    
+    ChildToggledItem(name, open) -> {
+      let next = case open, model.multiple {
+        True, True -> set.insert(model.open, name)
+        False, True -> set.delete(model.open, name)
+        True, False -> set.from_list([name])
+        False, False -> set.new()
+      }
+      
+      let effect = event.emit("accordion:change", {
+        next |> set.to_list |> json.array(json.string)
+      })
+      
+      #(Model(..model, open: next), effect)
+    }
+  }
+}
+
+// VIEW ------------------------------------------------------------------------
+
+fn view(model: Model) -> Element(Msg) {
+  component.default_slot([
+    attribute.role("region"),
+    event.on("accordion/item:toggle", {
+      use name <- decode.subfield(["detail", "name"], decode.string)
+      use open <- decode.subfield(["detail", "open"], decode.bool)
+      decode.success(ChildToggledItem(name, open))
+    }),
+  ], [])
+}
+```
+
+### File Structure
+
+```
+src/components/
+├── ui.gleam                    # Re-exports, registers all
+└── ui/
+    ├── button.gleam            # Simple (functions only)
+    ├── input.gleam             # Simple (functions only)
+    ├── badge.gleam             # Simple (functions only)
+    ├── accordion.gleam         # Complex (public API)
+    ├── accordion/
+    │   ├── root.gleam          # Web component (internal)
+    │   ├── item.gleam          # Web component (internal)
+    │   └── panel.gleam         # Web component (internal)
+    ├── modal.gleam             # Complex (public API)
+    └── modal/
+        └── ...
+```
+
+### Registration Module
+
+**Create `src/components/ui.gleam`:**
+
+```gleam
+//// UI component library.
+////
+//// Call `register()` before using stateful components.
+
+import gleam/result
+import lustre
+import components/ui/accordion
+
+// Re-export simple components
+pub const button = button
+pub const input = input
+pub const badge = badge
+
+// Re-export complex components
+pub const accordion = accordion
+
+/// Register all stateful components.
+pub fn register() -> Result(Nil, lustre.Error) {
+  use _ <- result.try(accordion.register())
+  // Add other stateful components here
+  Ok(Nil)
 }
 ```
 
 ## Best Practices
 
-1. **Consistency**: Use same naming pattern for all components
-2. **Reusability**: Make components generic with type parameters
-3. **Accessibility**: Use semantic HTML and ARIA attributes
-4. **Design System**: Reference CSS variables, not hardcoded values
-5. **Documentation**: Document component API and provide examples
-6. **Type Safety**: Leverage Gleam's type system for props
-7. **Variants**: Use custom types for variant options
-8. **Error States**: Support error/disabled/loading states
+1. **Message naming**: Use Subject-Verb-Object (`UserClickedSubmit`, not `Submit`)
+2. **Opaque types**: Hide internal structure of complex components
+3. **Keyed lists**: Always use `keyed.element` for dynamic lists
+4. **Accessibility**: Add ARIA attributes and keyboard navigation
+5. **Documentation**: Document attributes, events, and accessibility notes
+6. **Controlled props**: Support both controlled and uncontrolled modes
 
 ## References
 
 - [Lustre Documentation](https://hexdocs.pm/lustre/)
-- [Lustre Patterns](../patterns/lustre-patterns.md)
-- [Design System Guidelines](../contexts/lustre-dev.md#design-system-guidelines)
+- [Lustre UI Patterns](https://github.com/lustre-labs/ui)
+- [WAI-ARIA Patterns](https://www.w3.org/WAI/ARIA/apg/patterns/)
