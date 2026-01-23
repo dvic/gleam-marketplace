@@ -11,15 +11,18 @@
   "plugins": [
     {
       "name": "gleam",
-      "source": ".",
+      "source": {
+        "source": "github",
+        "repo": "renatillas/gleam"
+      },
       "description": "Complete Gleam development environment with skills, commands, agents, LSP, and MCP integration",
       "version": "1.0.0",
       "author": {
         "name": "Renata Amutio",
         "email": "renata.amutio@gmail.com"
       },
-      "homepage": "https://github.com/renatillas/gleam-claude-plugin",
-      "repository": "https://github.com/renatillas/gleam-claude-plugin",
+      "homepage": "https://github.com/renatillas/gleam",
+      "repository": "https://github.com/renatillas/gleam",
       "license": "MIT",
       "keywords": [
         "gleam",

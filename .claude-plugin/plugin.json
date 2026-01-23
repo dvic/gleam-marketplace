@@ -6,8 +6,8 @@
     "name": "Renata Amutio",
     "email": "renata.amutio@gmail.com"
   },
-  "homepage": "https://github.com/renatillas/gleam-claude-plugin",
-  "repository": "https://github.com/renatillas/gleam-claude-plugin",
+  "homepage": "https://github.com/renatillas/gleam",
+  "repository": "https://github.com/renatillas/gleam",
   "license": "MIT",
   "keywords": ["gleam", "functional-programming", "beam", "erlang", "otp", "type-safety", "web-development", "lustre", "wisp"]
 }

@@ -62,42 +62,10 @@ Delegate complex tasks to specialized agents:
 Install directly from GitHub using Claude Code's plugin system:
 
 ```shell
-# Add the marketplace
-/plugin marketplace add github:renatillas/gleam-claude-plugin
-
-# Install the plugin
-/plugin install gleam@gleam
+# Install directly from GitHub
+/plugin install gleam@github:renatillas/gleam
 ```
 
-Or install directly without adding the marketplace:
-
-```shell
-/plugin install gleam@github:renatillas/gleam-claude-plugin
-```
-
-### Alternative: Manual Installation
-
-#### Method 1: Clone and Link
-
-```bash
-# Clone this repository
-git clone https://github.com/renatillas/gleam-claude-plugin.git
-cd gleam-claude-plugin
-
-# Link to Claude Code plugins directory
-ln -s $(pwd) ~/.claude/plugins/gleam
-```
-
-#### Method 2: Direct Download
-
-```bash
-# Create plugins directory
-mkdir -p ~/.claude/plugins
-
-# Download and extract
-cd ~/.claude/plugins
-# Download from https://github.com/renatillas/gleam-claude-plugin
-```
 
 ### Verify Installation
 
@@ -158,7 +126,7 @@ To require this plugin for your team, add it to your project's `.claude/settings
     "gleam": {
       "source": {
         "source": "github",
-        "repo": "renatillas/gleam-claude-plugin"
+        "repo": "renatillas/gleam"
       }
     }
   },
