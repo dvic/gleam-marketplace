@@ -173,15 +173,24 @@ view_button("Enabled", Some(ButtonClicked))  // Clickable
 view_button("Disabled", None)                // Not clickable
 ```
 
-### 7. Add Component to Index (Optional)
+### 7. Import Components Where Needed
 
-If using a components index file:
+Import component modules directly in your views:
 
 ```gleam
-// In src/app/components.gleam
-pub use button.{view_button_primary, view_button_secondary}
-pub use input.{view_input_text, view_input_email}
+// In your view module
+import app/components/button
+import app/components/input
+
+pub fn view() {
+  html.div([], [
+    button.view_button_primary("Submit", Some(FormSubmitted), False),
+    input.view_input_text("Email", "email", "", [], OnEmailInput),
+  ])
+}
 ```
+
+Note: Gleam doesn't have a `pub use` syntax for re-exporting. Import modules directly where you need them.
 
 ### 8. Document Component API
 
