@@ -67,6 +67,26 @@ import app/users
 import app/payments/invoices
 ```
 
+### Result-Handling Functions (MANDATORY)
+
+Functions that return results should be given domain-appropriate names. Use the `try_` prefix for special result-handling versions of existing functions that short-circuit on errors, only when there's no more appropriate domain-specific name:
+
+```gleam
+pub fn map(list: List(a), f: fn(a) -> b) -> List(b)
+
+// Good
+pub fn try_map(
+  list: List(a),
+  f: fn(a) -> Result(b, e),
+) -> Result(List(b), e)
+
+// Bad - abstract terms
+pub fn monadic_bind(
+  list: List(a),
+  f: fn(a) -> Result(b, e),
+) -> Result(List(b), e)
+```
+
 ### Conversion Functions (MANDATORY)
 
 Use `x_to_y` pattern for conversion functions:
@@ -223,6 +243,28 @@ pub fn first(list: List(a)) -> Option(a) {
 - Error types can carry information (not just `None`)
 - Matches Gleam's ecosystem conventions
 
+### Use Core Libraries (MANDATORY)
+
+Use maintained Gleam packages as shared foundations rather than replicating functionality:
+
+- **gleam_stdlib** - Core data structures and utilities
+- **gleam_time** - Date and time handling
+- **gleam_http** - HTTP types and utilities
+- **gleam_erlang** - Erlang-specific functionality
+- **gleam_otp** - OTP abstractions and patterns
+- **gleam_javascript** - JavaScript-specific functionality
+
+```gleam
+// Good - using core libraries
+import gleam/list
+import gleam/result
+import gleam/http/request
+import gleam/otp/actor
+
+// Bad - reimplementing standard functionality
+// Don't write your own list.map, result.try, etc.
+```
+
 ### Libraries Never Panic (MANDATORY)
 
 Libraries must never use `panic` or `let assert`. Always return `Result`:
@@ -284,6 +326,32 @@ pub fn find_by_id(
 ```
 
 ## Code Organization
+
+### Source Directories (MANDATORY)
+
+Gleam projects have three standard source directories, each with specific import rules:
+
+- **src/** - Application/library code
+  - Can import from dependencies and other src modules
+  - Cannot import from test or dev
+
+- **test/** - Automated tests
+  - Can import from anywhere (src, dependencies, other test modules)
+
+- **dev/** - Development utilities (scripts, tooling, etc.)
+  - Can import from anywhere (src, dependencies, other dev modules)
+
+```gleam
+// In src/user.gleam
+import gleam/list  // OK - dependency
+import user/model  // OK - other src module
+// import user_test  // ERROR - can't import from test/
+
+// In test/user_test.gleam
+import gleam/list  // OK - dependency
+import user        // OK - can import from src
+import test_helpers // OK - can import from test
+```
 
 ### Project Structure
 
@@ -394,6 +462,40 @@ pub fn classify_file(content: String) -> FileOrigin {
 
 ## Common Patterns
 
+### Descriptive Error Types (RECOMMENDED)
+
+Design error type variants to describe domain-specific issues with fields containing debugging information:
+
+```gleam
+// Good - descriptive errors with context
+pub type UserError {
+  NotFound(id: Int)
+  InvalidEmail(email: String, reason: String)
+  DatabaseError(query: String, underlying: DbError)
+  PermissionDenied(user_id: Int, required_role: Role)
+}
+
+pub fn create_user(email: String) -> Result(User, UserError) {
+  case validate_email(email) {
+    False -> Error(InvalidEmail(email, "Must contain @ symbol"))
+    True -> // ...
+  }
+}
+
+// Bad - generic errors without context
+pub type UserError {
+  NotFound
+  Invalid
+  Error
+}
+```
+
+**Benefits:**
+- Clear debugging information
+- Pattern matching on specific error cases
+- Error messages include relevant data
+- Better logging and monitoring
+
 ### Builder Pattern
 
 For complex types with many optional fields:
@@ -434,22 +536,49 @@ pub fn process_user(id: Int) -> Result(User, Error) {
 }
 ```
 
-### Make Invalid States Impossible
+### Make Invalid States Impossible (RECOMMENDED)
 
-Design types that can't represent invalid states:
+Leverage Gleam's type system to make invalid states impossible to construct:
 
 ```gleam
 // Bad - can be in invalid state
+pub type User {
+  User(
+    id: Int,
+    name: String,
+    session_token: Option(String),  // Logged in?
+    guest_id: Option(String),       // Or guest?
+  )
+}
+// Problem: Could have both tokens, or neither!
+
+// Good - invalid states impossible
+pub type User {
+  LoggedIn(id: Int, name: String, session_token: String)
+  Guest(guest_id: String)
+}
+// Can't be both logged in AND guest
+// Can't be logged in without a token
+
+// Another example
+// Bad - state mismatch possible
 pub type Connection {
   Connection(url: String, connected: Bool, socket: Option(Socket))
 }
+// Problem: connected=True but socket=None is invalid
 
-// Good - invalid states impossible
+// Good - states are distinct
 pub type Connection {
   Disconnected(url: String)
   Connected(url: String, socket: Socket)
 }
 ```
+
+**Benefits:**
+- Compiler prevents invalid states
+- No runtime validation needed
+- Pattern matching forces handling all cases
+- Self-documenting code
 
 ## Anti-Patterns
 
@@ -501,6 +630,39 @@ case list.first(items) {
   Ok(item) -> use_item(item)
   Error(_) -> handle_empty()
 }
+```
+
+### Don't Pollute the Global Namespace
+
+Place modules within uniquely named directories matching your package name to prevent collisions:
+
+```gleam
+// Good - lustre package structure
+src/lustre/
+  element.gleam
+  attribute.gleam
+  event.gleam
+
+// Bad - pollutes global namespace
+src/
+  element.gleam  // Could conflict with other packages
+  attribute.gleam
+```
+
+This ensures that when users import your package, they use qualified names like `lustre/element` rather than just `element`.
+
+### Don't Trespass on Other Namespaces
+
+Don't place your modules in other packages' top-level directories, even for packages designed to integrate with them:
+
+```gleam
+// Bad - trespassing on lustre namespace
+src/lustre/
+  my_custom_element.gleam  // Don't put your code in lustre/
+
+// Good - your own namespace
+src/my_package/lustre/
+  custom_element.gleam  // Integrate with lustre under your namespace
 ```
 
 ## Tool Configuration

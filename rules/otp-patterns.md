@@ -541,8 +541,6 @@ fn handle_message(state: State, message: Message) {
 ### Testing Actors
 
 ```gleam
-import gleeunit/should
-
 pub fn counter_increments_test() {
   let assert Ok(counter) = start_counter()
 
