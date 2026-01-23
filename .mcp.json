@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gleam_packages": {
+      "transport": "http",
+      "url": "https://gleam-package-mcp.renata-amutio.workers.dev/",
+      "description": "Gleam package search and documentation server - search hex.pm and hexdocs.pm for Gleam packages, modules, functions, and types"
+    }
+  }
+}

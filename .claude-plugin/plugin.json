@@ -1,0 +1,13 @@
+{
+  "name": "gleam",
+  "version": "1.0.0",
+  "description": "Comprehensive Gleam development plugin for Claude Code with skills, commands, agents, LSP, and MCP integration",
+  "author": {
+    "name": "Renata Amutio",
+    "email": "renata.amutio@gmail.com"
+  },
+  "homepage": "https://github.com/renatillas/gleam-claude-plugin",
+  "repository": "https://github.com/renatillas/gleam-claude-plugin",
+  "license": "MIT",
+  "keywords": ["gleam", "functional-programming", "beam", "erlang", "otp", "type-safety", "web-development", "lustre", "wisp"]
+}
