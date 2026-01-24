@@ -564,8 +564,103 @@ pub fn view(
 7. **Blocking the main thread**: Use effects for async operations
 8. **Direct DOM manipulation**: Use Lustre's declarative approach
 
+## Development Tools Configuration
+
+Lustre dev tools are configured via the `[tools.lustre]` table in `gleam.toml`. See the [TOML Reference](https://hexdocs.pm/lustre_dev_tools/toml-reference.html) for all configuration options.
+
+### Common Configuration
+
+```toml
+[tools.lustre]
+
+# Build configuration
+[tools.lustre.build]
+minify = true            # Minify output (reduces size)
+outdir = "./dist"        # Output directory
+
+# Dev server configuration
+[tools.lustre.dev]
+host = "localhost"       # Bind to localhost or "0.0.0.0" for network access
+port = 1234              # Server port
+
+# Proxy API requests to backend
+[[tools.lustre.dev.proxy]]
+from = "/api"
+to = "http://localhost:3000"
+
+# HTML document structure
+[tools.lustre.html]
+title = "My App"         # Document title
+```
+
+### CLI Commands
+
+**Download binary dependencies:**
+```bash
+# Download Bun (JavaScript runtime and bundler)
+gleam run -m lustre/dev add bun
+
+# Download Tailwind CSS
+gleam run -m lustre/dev add tailwind
+```
+
+**Build project:**
+```bash
+# Build using your app's name (from gleam.toml), generates index.html
+gleam run -m lustre/dev build
+
+# Build a specific module, generates index.html
+gleam run -m lustre/dev build your_app/module
+
+# Build multiple entry points (requires manual index.html)
+gleam run -m lustre/dev build your_app/page1 your_app/page2
+```
+
+**Start development server:**
+```bash
+# Start dev server with file watching and hot reload
+gleam run -m lustre/dev start
+```
+
+Configuration from `gleam.toml` is automatically applied. Command-line flags (if supported) override configuration settings.
+
+### Tailwind CSS v4 Integration
+
+Create a CSS file in `src/` with the same name as your project (from `gleam.toml`):
+
+```css
+/* src/my_project.css */
+@import "tailwindcss";
+
+/* Your custom styles */
+@theme {
+  --color-primary: #3b82f6;
+  --font-heading: "Inter", sans-serif;
+}
+```
+
+Lustre dev tools will automatically detect and compile Tailwind v4. No `tailwind.config.js` needed!
+
+### API Proxying
+
+Forward API requests to a backend server during development:
+
+```toml
+[[tools.lustre.dev.proxy]]
+from = "/api"
+to = "http://localhost:3000"
+
+[[tools.lustre.dev.proxy]]
+from = "/auth"
+to = "http://localhost:4000"
+```
+
+Requests to `/api/*` are forwarded to `http://localhost:3000/api/*` while preserving the path.
+
 ## References
 
 - [Lustre Docs](https://hexdocs.pm/lustre/)
+- [Lustre Dev Tools CLI](https://hexdocs.pm/lustre_dev_tools/lustre/dev.html)
+- [Lustre Dev Tools TOML Reference](https://hexdocs.pm/lustre_dev_tools/toml-reference.html)
 - [Lustre UI Source](https://github.com/lustre-labs/ui/tree/hayleigh/headless-redux-redux)
 - [WAI-ARIA Patterns](https://www.w3.org/WAI/ARIA/apg/patterns/)

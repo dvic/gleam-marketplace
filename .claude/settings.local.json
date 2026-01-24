@@ -7,5 +7,9 @@
       "mcp__gleam_packages__get_modules",
       "mcp__gleam_packages__get_module_info"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "gleam_packages"
+  ],
+  "enableAllProjectMcpServers": true
 }
