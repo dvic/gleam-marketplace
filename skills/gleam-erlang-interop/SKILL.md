@@ -9,6 +9,11 @@ This skill guides Claude Code through integrating Gleam with Erlang and Elixir c
 
 **IMPORTANT**: Always prefer pure Gleam solutions. Use externals only when there is no suitable alternative.
 
+## Package Versions
+
+- `gleam_erlang` v1.3.0 (requires Gleam >= 1.11.0, OTP >= 27.0)
+- `gleam_otp` v1.2.0
+
 ## Primary Sources
 
 1. **[Gleam Externals Documentation](https://gleam.run/documentation/externals/)** - Official FFI guide
@@ -243,12 +248,80 @@ See: [Gleam OTP Documentation](https://hexdocs.pm/gleam_otp/)
 ```gleam
 import gleam/erlang/atom.{type Atom}
 
-pub fn create_atom(name: String) -> Atom {
-  atom.create_from_string(name)
+// Safe lookup - returns Error(Nil) if atom doesn't exist
+pub fn find_atom(name: String) -> Result(Atom, Nil) {
+  atom.get(name)
 }
+
+// Create atom - WARNING: atoms are never garbage collected!
+// Only use for known, fixed values. Never for user input.
+pub fn create_atom(name: String) -> Atom {
+  atom.create(name)
+}
+
+// Decode atoms from dynamic data
+import gleam/dynamic/decode
+let decoder = atom.decoder()
 ```
 
+**Key functions:**
+- `atom.get(String) -> Result(Atom, Nil)` - Safe lookup of existing atom
+- `atom.create(String) -> Atom` - Create atom (fills atom table permanently)
+- `atom.to_string(Atom) -> String` - Convert to string
+- `atom.to_dynamic(Atom) -> Dynamic` - Convert to dynamic (useful for testing)
+- `atom.decoder() -> decode.Decoder(Atom)` - Dynamic decoder
+
 See: [gleam_erlang - Atom](https://hexdocs.pm/gleam_erlang/gleam/erlang/atom.html)
+
+### Process Module (gleam/erlang/process)
+
+The process module provides typed message passing and concurrency primitives:
+
+```gleam
+import gleam/erlang/process.{type Subject, type Pid, type Selector}
+
+// Typed channels for message passing
+let subject = process.new_subject()
+process.send(subject, "hello")
+let assert Ok(msg) = process.receive(subject, within: 1000)
+
+// Named processes for discovery
+let name = process.new_name("my_worker")
+let named = process.named_subject(name)
+process.send(named, "hello")
+
+// Selectors for receiving from multiple sources
+let selector = process.new_selector()
+  |> process.select(subject1)
+  |> process.select_map(subject2, fn(msg) { transform(msg) })
+let assert Ok(result) = process.selector_receive(selector, within: 1000)
+
+// Synchronous call with timeout
+let reply = process.call(server_subject, waiting: 5000, sending: fn(reply_to) {
+  GetValue(reply_to)
+})
+
+// Spawn processes
+let pid = process.spawn(fn() { do_work() })
+let pid = process.spawn_unlinked(fn() { do_work() })
+```
+
+**Key types:**
+- `Subject(message)` - Typed channel (owned by PID or named)
+- `Name(message)` - Named process identifier
+- `Selector(payload)` - Multi-source message receiver
+- `Monitor` - Process monitor reference
+- `Down` - Monitor down message (replaces old `ProcessDown`)
+
+**Renamed functions in v1.0.0:**
+- `selecting_*` → `select_*`
+- `select`/`select_forever` → `selector_receive`/`selector_receive_forever`
+- `start` → `spawn`/`spawn_unlinked`
+- `try_call` → `call` (now panics on timeout/death)
+- `atom.from_string` → `atom.get`
+- `atom.create_from_string` → `atom.create`
+
+See: [gleam_erlang - Process](https://hexdocs.pm/gleam_erlang/gleam/erlang/process.html)
 
 ### ETS (Erlang Term Storage)
 

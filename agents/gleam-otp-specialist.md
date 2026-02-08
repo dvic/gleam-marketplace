@@ -31,10 +31,16 @@ Use this agent when:
 - Process monitoring
 
 ### Gleam OTP Libraries
-- `gleam/otp/actor` - Type-safe actors
-- `gleam/otp/supervisor` - Supervision
-- `gleam/otp/task` - One-off tasks
+- `gleam/otp/actor` - Type-safe actors (Builder pattern)
+- `gleam/otp/static_supervisor` - Static supervision with predefined children
+- `gleam/otp/factory_supervisor` - Dynamic supervision for runtime-spawned children
+- `gleam/otp/supervision` - Child specs, restart strategies
+- `gleam/otp/system` - OTP system debugging
 - `gleam/erlang/process` - Low-level processes
+
+### Removed Modules (DO NOT USE)
+- ~~`gleam/otp/supervisor`~~ - Replaced by `static_supervisor`
+- ~~`gleam/otp/task`~~ - Removed, use `taskle` package
 
 ## Approach
 
@@ -71,6 +77,9 @@ Use this agent when:
 ## Actor Pattern
 
 ```gleam
+import gleam/otp/actor
+import gleam/erlang/process.{type Subject}
+
 pub type State { State(...) }
 pub type Message {
   Request(reply_with: Subject(Response))
@@ -81,13 +90,13 @@ pub type Message {
 pub fn start() -> Result(actor.Started(Subject(Message)), actor.StartError) {
   actor.new(initial_state())
   |> actor.on_message(handle_message)
-  |> actor.start()
+  |> actor.start
 }
 
 fn handle_message(state: State, msg: Message) -> actor.Next(State, Message) {
   case msg {
     Request(client) -> {
-      actor.send(client, compute_response(state))
+      process.send(client, compute_response(state))
       actor.continue(state)
     }
     Update(data) -> {
@@ -101,16 +110,36 @@ fn handle_message(state: State, msg: Message) -> actor.Next(State, Message) {
 ## Supervision Pattern
 
 ```gleam
-pub fn start() -> Result(Subject(supervisor.Message), StartError) {
-  supervisor.start(init)
-}
+import gleam/otp/static_supervisor.{type Supervisor} as supervisor
+import gleam/otp/supervision
+import gleam/otp/actor
 
-fn init(children: supervisor.Children) -> supervisor.Children {
-  children
-  |> supervisor.add(supervisor.worker(start_database_pool))
-  |> supervisor.add(supervisor.worker(start_cache))
-  |> supervisor.add(supervisor.supervisor(web_supervisor))
+pub fn start() -> Result(actor.Started(Supervisor), actor.StartError) {
+  supervisor.new(supervisor.OneForOne)
+  |> supervisor.add(supervision.worker(start_database_pool))
+  |> supervisor.add(supervision.worker(start_cache))
+  |> supervisor.add(supervision.supervisor(start_web_supervisor))
+  |> supervisor.start
 }
+```
+
+## Factory Supervisor Pattern
+
+```gleam
+import gleam/otp/factory_supervisor as factory
+import gleam/erlang/process
+
+// Create name at program start
+let workers_name = process.new_name("workers")
+
+// Build factory supervisor
+let builder =
+  factory.worker_child(start_worker)
+  |> factory.named(workers_name)
+
+// Start children dynamically
+let supervisor = factory.get_by_name(workers_name)
+factory.start_child(supervisor, worker_arg)
 ```
 
 ## Key References
@@ -119,7 +148,9 @@ fn init(children: supervisor.Children) -> supervisor.Children {
 - [OTP Development Skill](../skills/gleam-otp-development/SKILL.md)
 - [Gleam OTP Docs](https://hexdocs.pm/gleam_otp/)
 - [Actor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/actor.html)
-- [Supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/supervisor.html)
+- [Static Supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/static_supervisor.html)
+- [Factory Supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/factory_supervisor.html)
+- [Supervision Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/supervision.html)
 - [Using Supervisors Tutorial](https://vpgleam.substack.com/p/gleam-otp-using-supervisors)
 
 ## Critical Anti-Patterns to Avoid
@@ -140,14 +171,14 @@ See: [OTP Anti-Patterns](../rules/otp-patterns.md)
 
 ## When to Use OTP
 
-✅ Use OTP for:
+Use OTP for:
 - Concurrent operations
 - Stateful long-running services
 - Fault tolerance
 - Process isolation
 - Scalability
 
-❌ Don't use OTP for:
+Don't use OTP for:
 - Pure computation
 - Simple state management
 - Code organization
@@ -158,13 +189,13 @@ See: [OTP Anti-Patterns](../rules/otp-patterns.md)
 State + Messages + Handler pattern
 
 ### Worker Pool
-Multiple workers under supervisor
+Multiple workers under supervisor (static or factory)
 
 ### Pipeline
 Chain of actors processing data
 
 ### Registry
-Process registration and discovery
+Process registration and discovery with `process.new_name`
 
 ### Event Manager
 Pub/sub with process-based subscribers
@@ -172,7 +203,8 @@ Pub/sub with process-based subscribers
 ## Debugging Tips
 
 - Use Erlang Observer (`:observer.start()`)
-- Log actor state transitions
+- Use `system.get_state(pid)` for actor state inspection
+- Use `system.suspend(pid)` / `system.resume(pid)` for debugging
 - Monitor process message queues
 - Check supervision restart logs
 - Use `process.monitor` for tracking

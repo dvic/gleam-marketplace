@@ -70,7 +70,7 @@ pub fn main() {
   process.send(counter, Increment)
 
   // Synchronous call
-  let count = process.call(counter, GetCount, 1000)
+  let count = process.call(counter, waiting: 1000, sending: GetCount)
   // count == 2
 }
 ```
@@ -278,23 +278,68 @@ pub fn start_app() {
 }
 ```
 
-## Task Pattern (gleam/otp/task)
+## Factory Supervisor Pattern (gleam/otp/factory_supervisor)
 
-Tasks are for one-off concurrent operations:
+Factory supervisors dynamically spawn children at runtime from a template. All children are the same type.
+
+Use for: Connection pools, per-request workers, dynamic task handlers.
+
+### Basic Factory Supervisor
 
 ```gleam
-import gleam/otp/task
+import gleam/otp/factory_supervisor as factory
+import gleam/otp/actor
+import gleam/erlang/process
 
-pub fn fetch_multiple_resources() -> List(Result(Resource, Error)) {
-  let tasks = [
-    task.async(fn() { fetch_resource(1) }),
-    task.async(fn() { fetch_resource(2) }),
-    task.async(fn() { fetch_resource(3) }),
-  ]
+// 1. Create a name at program start (not in loops!)
+let workers_name = process.new_name("workers")
 
-  list.map(tasks, task.await_forever)
+// 2. Build and start the factory supervisor
+let builder =
+  factory.worker_child(fn(arg) { start_worker(arg) })
+  |> factory.named(workers_name)
+
+let assert Ok(_) =
+  factory.start(builder)
+
+// 3. Start children dynamically at runtime
+let supervisor = factory.get_by_name(workers_name)
+let assert Ok(started) = factory.start_child(supervisor, worker_arg)
+```
+
+### Factory as Part of Supervision Tree
+
+```gleam
+import gleam/otp/factory_supervisor as factory
+import gleam/otp/static_supervisor as supervisor
+import gleam/otp/supervision
+
+pub fn start_app() {
+  let worker_factory =
+    factory.worker_child(start_worker)
+    |> factory.supervised
+
+  supervisor.new(supervisor.OneForOne)
+  |> supervisor.add(supervision.worker(start_database))
+  |> supervisor.add(worker_factory)
+  |> supervisor.start
 }
 ```
+
+### Factory Configuration
+
+```gleam
+factory.worker_child(start_worker)
+|> factory.restart_tolerance(intensity: 5, period: 10)
+|> factory.timeout(ms: 10_000)
+|> factory.restart_strategy(supervision.Transient)
+```
+
+### One-Off Tasks
+
+The `gleam/otp/task` module was removed in v1.0.0. Use alternatives:
+- [Taskle Library](https://hexdocs.pm/taskle/) for Elixir-like task functionality
+- `process.spawn` for simple fire-and-forget operations
 
 ## Worker Pool Pattern
 
@@ -456,7 +501,7 @@ pub fn multiply(a: Int, b: Int) -> Int {
 // Bad - blocking call for each item
 pub fn process_many(items: List(Item)) {
   list.map(items, fn(item) {
-    process.call(processor, Process(item, _), 5000)  // Blocks!
+    process.call(processor, waiting: 5000, sending: Process(item, _))  // Blocks!
   })
 }
 ```
@@ -473,7 +518,7 @@ pub fn process_many(items: List(Item), callback: Subject(Result)) {
 
 // Or batch operations
 pub fn process_many(items: List(Item)) {
-  process.call(processor, ProcessBatch(items, _), 10_000)
+  process.call(processor, waiting: 10_000, sending: ProcessBatch(items, _))
 }
 ```
 
@@ -483,17 +528,17 @@ pub fn process_many(items: List(Item)) {
 
 ```gleam
 // Bad - too short, fragile
-process.call(server, Request, 10)  // 10ms
+process.call(server, waiting: 10, sending: Request)  // 10ms
 ```
 
 **DO** use reasonable timeouts:
 
 ```gleam
 // Good - reasonable timeout
-process.call(server, Request, 5000)  // 5 seconds
+process.call(server, waiting: 5000, sending: Request)  // 5 seconds
 
 // Or longer for slow operations
-process.call(database, ComplexQuery, 30_000)  // 30 seconds
+process.call(database, waiting: 30_000, sending: ComplexQuery)  // 30 seconds
 ```
 
 ### Ignoring Shutdown (ANTI-PATTERN)
@@ -547,7 +592,7 @@ pub fn counter_increments_test() {
   process.send(counter, Increment)
   process.send(counter, Increment)
 
-  let count = process.call(counter, Get, 1000)
+  let count = process.call(counter, waiting: 1000, sending: Get)
   assert count == 2
 }
 ```
@@ -598,7 +643,7 @@ pub fn increment(counter: Counter) -> Nil {
 }
 
 pub fn get_count(counter: Counter) -> Int {
-  process.call(counter.subject, Get, 1000)
+  process.call(counter.subject, waiting: 1000, sending: Get)
 }
 ```
 
@@ -648,5 +693,7 @@ Only restarts on abnormal exits, not normal completion.
 - [gleam_otp Package](https://hexdocs.pm/gleam_otp/)
 - [gleam/otp/actor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/actor.html)
 - [gleam/otp/static_supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/static_supervisor.html)
+- [gleam/otp/factory_supervisor Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/factory_supervisor.html)
+- [gleam/otp/supervision Documentation](https://hexdocs.pm/gleam_otp/gleam/otp/supervision.html)
 - [Erlang OTP Design Principles](https://www.erlang.org/doc/design_principles/des_princ.html)
 - [Using Supervisors Tutorial](https://vpgleam.substack.com/p/gleam-otp-using-supervisors)
