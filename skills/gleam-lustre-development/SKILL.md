@@ -7,6 +7,10 @@ description: Guides Claude through idiomatic Lustre frontend development. Use wh
 
 This skill guides Claude Code through **idiomatic Lustre development** following patterns from the official `lustre_ui` library.
 
+## Package Version
+
+- Lustre v5.5.2 (requires Gleam >= 1.13.0)
+
 ## Primary Sources
 
 1. **[Lustre Documentation](https://hexdocs.pm/lustre/)** - Official docs
@@ -214,20 +218,26 @@ pub const tag: String = "my-component"
 
 pub fn register() -> Result(Nil, lustre.Error) {
   let comp = lustre.component(init:, update:, view:, options: [
-    // Don't inherit parent styles
-    component.adopt_styles(False),
-    
+    // Open shadow DOM (optional)
+    component.open_shadow_root(),
+
+    // Inject CSS into Shadow DOM
+    component.adopt_styles("
+      :host { display: block; }
+      :host(:state(open)) { border: 1px solid blue; }
+    "),
+
     // React to attribute changes
     component.on_attribute_change("value", fn(value) {
       Ok(ParentSetValue(value))
     }),
-    
+
     // React to property changes (for complex values)
     component.on_property_change("items", {
       decode.list(decode.string)
       |> decode.map(ParentSetItems)
     }),
-    
+
     // React to context from ancestors
     component.on_context_change("theme", {
       use theme <- decode.field("theme", decode.string)
@@ -284,10 +294,22 @@ effect.none()
 // Batch multiple effects
 effect.batch([effect1, effect2, effect3])
 
-// Custom effect
+// Custom effect (runs immediately after update)
 effect.from(fn(dispatch) {
   // Do something async
   dispatch(SomethingHappened(result))
+})
+
+// Run before browser paint (like React's useLayoutEffect)
+effect.before_paint(fn(dispatch) {
+  // Measure DOM, synchronous layout changes
+  dispatch(LayoutMeasured(dimensions))
+})
+
+// Run after browser paint (like React's useEffect)
+effect.after_paint(fn(dispatch) {
+  // Animations, non-urgent side effects
+  dispatch(AnimationStarted)
 })
 
 // Emit custom event (for components)
@@ -301,18 +323,19 @@ effect.provide("context-name", json.object([
 ]))
 ```
 
-## Event Handling with Decoders
+## Event Handling
 
 ```gleam
 import gleam/dynamic/decode
 import lustre/event
 
-// Simple event
-pub fn on_click(msg: msg) -> Attribute(msg) {
-  event.on_click(msg)
-}
+// Simple handler (no decoding needed)
+event.on_click(UserClickedButton)
+event.on_input(UserTypedInField)
+event.on_check(UserToggledCheckbox)
+event.on_submit(UserSubmittedForm)
 
-// Custom event with detail
+// Custom event with decoder
 pub fn on_change(handler: fn(String) -> msg) -> Attribute(msg) {
   event.on("change", {
     use value <- decode.field("detail", decode.string)
@@ -328,20 +351,29 @@ pub fn on_item_change(handler: fn(String, Bool) -> msg) -> Attribute(msg) {
     decode.success(handler(id, open))
   })
 }
+```
 
-// Event with preventDefault/stopPropagation
-fn handle_keydown() -> Decoder(Handler(Msg)) {
-  use key <- decode.field("key", decode.string)
-  
-  case key {
-    "Enter" -> decode.success(event.handler(
-      dispatch: UserPressedEnter,
-      prevent_default: True,
-      stop_propagation: False,
-    ))
-    _ -> decode.failure(UserPressedEnter, "not enter")
-  }
-}
+### Event Modifiers (v5+)
+
+```gleam
+// Handler with modifiers (preventDefault, stopPropagation, debounce, throttle)
+event.advanced("keydown", key_decoder, [
+  event.prevent_default,
+  event.stop_propagation,
+])
+
+// Debounce input (wait N ms after last event)
+event.advanced("input", input_decoder, [
+  event.debounce(300),
+])
+
+// Throttle scroll (at most once per N ms)
+event.advanced("scroll", scroll_decoder, [
+  event.throttle(100),
+])
+
+// Simple handler shortcut (no decoding, just a msg)
+event.handler("click", UserClickedThing)
 ```
 
 ## CSS Pseudo-States
@@ -359,6 +391,39 @@ case model.open {
 
 // CSS can use :state(open) selector
 // :host(:state(open)) { ... }
+```
+
+## Performance: Memoisation (v5.5.0+)
+
+Memoised rendering skips re-rendering when inputs haven't changed (~60% improvement in benchmarks):
+
+```gleam
+import lustre/element
+
+// Value-based memoisation: re-renders only when `data` changes
+element.memo(data, fn(data) {
+  html.div([], [
+    html.text(data.name),
+    html.text(data.description),
+  ])
+})
+
+// Reference-based memoisation: re-renders only when ref changes
+let ref = element.ref()
+element.ref(ref, fn() {
+  expensive_render()
+})
+```
+
+## Fragments
+
+Group elements without a wrapper node:
+
+```gleam
+element.fragment([
+  html.h1([], [html.text("Title")]),
+  html.p([], [html.text("Content")]),
+])
 ```
 
 ## Keyed Rendering for Lists
@@ -553,6 +618,91 @@ pub fn view(
 }
 ```
 
+## OTP Integration (Erlang target, v5.5.0+)
+
+Lustre apps can be supervised as OTP processes:
+
+```gleam
+import lustre
+import gleam/otp/static_supervisor as supervisor
+import gleam/otp/supervision
+import gleam/erlang/process
+
+// Named app (for process registry)
+let app =
+  lustre.application(init, update, view)
+  |> lustre.named(process.new_name("my_app"))
+
+// Add to OTP supervision tree
+supervisor.new(supervisor.OneForOne)
+|> supervisor.add(lustre.supervised(app, initial_args))
+|> supervisor.start
+
+// Factory for on-demand component spawning
+supervisor.new(supervisor.OneForOne)
+|> supervisor.add(lustre.factory(app))
+|> supervisor.start
+
+// Send messages to a running runtime
+lustre.send(runtime, SomeMessage)
+```
+
+## Server Components
+
+Run Lustre apps on the Erlang server, streaming DOM patches to a ~10kb client runtime:
+
+```gleam
+import lustre
+import lustre/server_component
+
+// Start server-side (Erlang only)
+let app = lustre.application(init, update, view)
+let assert Ok(runtime) = lustre.start_server_component(app, initial_args)
+
+// Client-side: render the server component element
+server_component.element([
+  server_component.route("/ws/my-component"),
+  server_component.method(server_component.WebSocket),
+  // Specify which event properties to serialize to the server
+  server_component.include(["target.value", "key"]),
+])
+
+// Emit events to connected clients
+server_component.emit("notification", json.string("hello"))
+```
+
+**Transport methods:** `WebSocket`, `ServerSentEvents`, `Polling`
+
+## Testing with Simulation
+
+Lustre provides testing utilities for snapshot and behavior testing:
+
+```gleam
+import lustre/dev/simulate
+import lustre/dev/query
+
+// Create and start a simulated app
+let app = simulate.application(init, update, view)
+let sim = simulate.start(app, Nil)
+
+// Dispatch messages directly
+let sim = simulate.message(sim, UserClickedIncrement)
+let sim = simulate.message(sim, UserClickedIncrement)
+simulate.model(sim).count  // 2
+
+// Simulate DOM events
+let sim = simulate.click(sim, on: query.element(matching: query.tag("button")))
+let sim = simulate.input(sim, on: query.element(matching: query.id("name")), value: "Alice")
+
+// Query the virtual DOM
+let view = simulate.view(sim)
+query.find(in: view, matching: query.element(matching: query.class("active")))
+query.has(in: view, matching: query.element(matching: query.text("Hello")))
+
+// Inspect event history
+simulate.history(sim)  // List of dispatched events
+```
+
 ## Common Mistakes to Avoid
 
 1. **Imperative message names**: Use `UserClickedSave` not `Save`
@@ -657,10 +807,21 @@ to = "http://localhost:4000"
 
 Requests to `/api/*` are forwarded to `http://localhost:3000/api/*` while preserving the path.
 
+## Companion Ecosystem
+
+- **[rsvp](https://hexdocs.pm/rsvp/)** - HTTP client (recommended over lustre_http)
+- **[modem](https://hexdocs.pm/modem/)** - Client-side routing
+- **[plinth](https://hexdocs.pm/plinth/)** - Browser API bindings
+- **[formal](https://hexdocs.pm/formal/)** - Form validation
+- **[birdie](https://hexdocs.pm/birdie/)** - Snapshot testing
+- **[houdini](https://hexdocs.pm/houdini/)** - HTML entity escaping
+- **[lustre_dev_tools](https://hexdocs.pm/lustre_dev_tools/)** - Dev server with hot reload
+- **[lustre/ui](https://github.com/lustre-labs/ui)** - Official UI component library
+
 ## References
 
 - [Lustre Docs](https://hexdocs.pm/lustre/)
 - [Lustre Dev Tools CLI](https://hexdocs.pm/lustre_dev_tools/lustre/dev.html)
 - [Lustre Dev Tools TOML Reference](https://hexdocs.pm/lustre_dev_tools/toml-reference.html)
-- [Lustre UI Source](https://github.com/lustre-labs/ui/tree/hayleigh/headless-redux-redux)
+- [Lustre UI Source](https://github.com/lustre-labs/ui)
 - [WAI-ARIA Patterns](https://www.w3.org/WAI/ARIA/apg/patterns/)
